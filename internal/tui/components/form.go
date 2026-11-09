@@ -419,6 +419,18 @@ func (s *Sidebar) Update(msg tea.Msg) (tea.Cmd, SidebarEvent) {
 	}
 	_, cmd := s.form.Update(msg)
 
+	// Only commit a strategy change (and rebuild the form) when the user is
+	// not merely browsing options with the arrow keys: navigating a <select>
+	// calls updateValue() on every arrow, and rebuilding mid-navigation resets
+	// the highlighted option to the first entry.
+	isArrow := false
+	if km, ok := msg.(tea.KeyMsg); ok {
+		switch km.String() {
+		case "up", "down", "left", "right", "k", "j", "h", "l":
+			isArrow = true
+		}
+	}
+
 	switch s.form.State {
 	case huh.StateCompleted:
 		s.rebuild() // Enter on the last field -> run, then reset the form
@@ -427,10 +439,17 @@ func (s *Sidebar) Update(msg tea.Msg) (tea.Cmd, SidebarEvent) {
 		s.rebuild() // never let the user brick the sidebar
 		return cmd, SidebarAborted
 	default:
-		if cur := strings.TrimSpace(s.fv.Get("strategy")); cur != s.prevStr {
-			s.fv.InstallDefaults(false) // sync defaults for the new strategy
-			s.rebuild()
-			return cmd, SidebarStrategy
+		if isArrow {
+			// keep defaults in sync while browsing, but don't rebuild
+			if cur := strings.TrimSpace(s.fv.Get("strategy")); cur != s.prevStr {
+				s.fv.InstallDefaults(false)
+			}
+		} else {
+			if cur := strings.TrimSpace(s.fv.Get("strategy")); cur != s.prevStr {
+				s.fv.InstallDefaults(false) // sync defaults for the new strategy
+				s.rebuild()
+				return cmd, SidebarStrategy
+			}
 		}
 	}
 	return cmd, SidebarNone
