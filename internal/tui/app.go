@@ -173,6 +173,7 @@ func (m *Model) SyncDefaults() {
 // queueRun validates the sidebar and launches an async benchmark.
 func (m *Model) queueRun() tea.Cmd {
 	if m.busy {
+		m.status, m.isErr = "run already in progress…", false
 		return nil
 	}
 	cfg, errCfg := m.fv.EngineConfig()

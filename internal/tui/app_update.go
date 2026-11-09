@@ -167,7 +167,7 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab", "shift+tab":
 		m.cycleZone()
 		return m, nil
-	case "r", "ctrl+r":
+	case "r", "R", "ctrl+r":
 		return m, m.queueRun()
 	case "s":
 		m.savePreset()
