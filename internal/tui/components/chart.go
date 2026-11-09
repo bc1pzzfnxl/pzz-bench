@@ -351,7 +351,13 @@ func (c *Chart) refresh() {
 	c.ts.SetYRange(yLo, yHi)
 
 	push := func(name string, v []float64) {
+		if len(v) == 0 {
+			return
+		}
 		for i, t := range c.data.Times {
+			if i >= len(v) {
+				break
+			}
 			x := v[i]
 			if isNaN(x) {
 				continue
