@@ -63,7 +63,7 @@ func (m *Model) statusBar(w int) string {
 	}
 	chipW := lipgloss.Width(st) + 2
 	hintsW := w - chipW - 1
-	hints := truncate(keyHints, maxI(hintsW, 0))
+	hints := truncate(contextualHints(m), maxI(hintsW, 0))
 	line := chip.Render(st) + " " + lipgloss.NewStyle().
 		Foreground(lipgloss.Color(Subtext)).Render(hints)
 	pad := w - lipgloss.Width(line)
@@ -89,10 +89,8 @@ func truncate(s string, w int) string {
 func (m *Model) content() string {
 	contentH := m.H - 2 // title + status rows
 	switch m.ws {
-	case wsGrid:
-		return m.gridPane(contentH)
-	case wsData:
-		return m.dataPane(contentH)
+	case wsTools:
+		return m.toolsPane(contentH)
 	default:
 		return m.studioPane(contentH)
 	}
@@ -139,37 +137,31 @@ func (m *Model) studioPane(contentH int) string {
 // sideMinWidth guards tiny terminals.
 const sideMinWidth = 40
 
-// gridPane is workspace 2: sidebar + optimizer heatmap.
-func (m *Model) gridPane(contentH int) string {
+// toolsPane is workspace 2: sidebar + optimizer or data manager.
+func (m *Model) toolsPane(contentH int) string {
 	mainW := m.W - sidebarW - 1
 	if mainW < sideMinWidth {
 		mainW = sideMinWidth
 	}
-	m.heat.SetWidth(mainW - 4)
-	title := "◆ 2D parameter grid — " + engine.MetricLabel(m.heat.Metric()) + " (m cycles, ←↑↓→ cells, g re-run)"
-	grid := m.heat.Caption()
-	if grid != "" {
-		grid += "\n\n"
-	}
-	grid += trimLines(m.heat.View(), contentH-8)
-	side := box("⌥ parameters", m.sb.View(), sidebarW, contentH, m.zone == zSidebar)
-	main := box(title, grid, mainW, contentH, m.zone == zMain)
-	return lipgloss.JoinHorizontal(lipgloss.Top, side, " ", main)
-}
-
-// dataPane is workspace 3: sidebar + sqlite cache inventory.
-func (m *Model) dataPane(contentH int) string {
-	mainW := m.W - sidebarW - 1
-	if mainW < sideMinWidth {
-		mainW = sideMinWidth
-	}
-	title := "▤ market cache — press u to pull missing candles from Binance/mempool"
-	body := m.dataBody(mainW)
-	if lines := strings.Count(body, "\n") + 1; lines > contentH-4 {
-		body = trimLines(body, contentH-4)
+	var main string
+	if m.toolTab == 0 {
+		m.heat.SetWidth(mainW - 4)
+		title := "◆ optimizer — " + engine.MetricLabel(m.heat.Metric()) + " (g re-run, ←↑↓→ cells, m metric)"
+		grid := m.heat.Caption()
+		if grid != "" {
+			grid += "\n\n"
+		}
+		grid += trimLines(m.heat.View(), contentH-8)
+		main = box(title, grid, mainW, contentH, m.zone == zMain)
+	} else {
+		title := "▤ market cache — press u to pull missing candles"
+		body := m.dataBody(mainW)
+		if lines := strings.Count(body, "\n") + 1; lines > contentH-4 {
+			body = trimLines(body, contentH-4)
+		}
+		main = box(title, body, mainW, contentH, m.zone == zMain)
 	}
 	side := box("⌥ parameters", m.sb.View(), sidebarW, contentH, m.zone == zSidebar)
-	main := box(title, body, mainW, contentH, m.zone == zMain)
 	return lipgloss.JoinHorizontal(lipgloss.Top, side, " ", main)
 }
 
@@ -268,7 +260,27 @@ func (m *Model) helpOverlay() string {
 	return lipgloss.Place(m.W, m.H-2, lipgloss.Center, lipgloss.Center, inner)
 }
 
-// maxI returns the larger int.
+// contextualHints returns the short hint line for the current workspace/zone.
+func contextualHints(m *Model) string {
+	base := "[1/2] ws · [Tab] focus · [r] run · [s] save · [e] export · [?] help · [q] quit"
+	switch m.ws {
+	case wsStudio:
+		switch m.zone {
+		case zSidebar:
+			return base + " · [Enter] next field"
+		case zChart:
+			return base + " · [v] mode · [h/l] pan · [+/-] zoom · [0] reset"
+		case zBottom:
+			return base + " · [[]/] tabs · [↑/↓] rows · [PgUp/PgDn] page · [Home/End]"
+		}
+	case wsTools:
+		if m.toolTab == 0 {
+			return base + " · [[]/] tab · [g] run grid · [m] metric · [arrows] navigate"
+		}
+		return base + " · [[]/] tab · [u] sync cache"
+	}
+	return base
+}
 func maxI(a, b int) int {
 	if a > b {
 		return a

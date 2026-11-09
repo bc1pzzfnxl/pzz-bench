@@ -22,17 +22,14 @@ type workspace uint8
 
 const (
 	wsStudio workspace = iota // 1: chart + sidebar + kpi
-	wsGrid                    // 2: 2D optimizer heatmap
-	wsData                    // 3: data manager
+	wsTools                   // 2: optimizer / data manager
 )
 
 // workspaceName renders the workspace label.
 func workspaceName(w workspace) string {
 	switch w {
-	case wsGrid:
-		return "[2] grid optimizer"
-	case wsData:
-		return "[3] data manager"
+	case wsTools:
+		return "[2] tools"
 	default:
 		return "[1] studio"
 	}
@@ -80,8 +77,9 @@ type Model struct {
 	loader *data.DataLoader
 
 	W, H int
-	ws   workspace
-	zone zone
+	ws      workspace
+	zone    zone
+	toolTab int // 0 = optimizer, 1 = data manager
 
  fv *components.FormValues
 	sb  *components.Sidebar

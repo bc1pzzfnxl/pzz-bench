@@ -88,7 +88,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // autoGridCmd launches the sweep when landing on workspace 2 without data.
 func (m *Model) autoGridCmd() tea.Cmd {
-	if m.ws == wsGrid && !m.heat.HasData() && !m.busy {
+	if m.ws == wsTools && m.toolTab == 0 && !m.heat.HasData() && !m.busy {
 		return m.queueGrid()
 	}
 	return nil
@@ -123,20 +123,16 @@ func (m *Model) enterWorkspace(w workspace) tea.Cmd {
 		if m.zone == zMain {
 			m.zone = zChart
 		}
-	case wsGrid:
-		if m.zone != zSidebar {
-			m.zone = zMain
-		}
-	case wsData:
+	case wsTools:
 		if m.zone != zSidebar {
 			m.zone = zMain
 		}
 	}
 	m.kpi.ResetTabs()
 	switch {
-	case w == wsGrid && !m.heat.HasData():
+	case w == wsTools && m.toolTab == 0 && !m.heat.HasData():
 		return m.queueGrid()
-	case w == wsData && !m.busy:
+	case w == wsTools && m.toolTab == 1 && !m.busy:
 		return m.queueRefreshStatuses()
 	}
 	return nil
@@ -176,15 +172,15 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.exportReport()
 		return m, nil
 	case "g":
-		if m.ws == wsGrid && !m.busy {
+		if m.ws == wsTools && m.toolTab == 0 && !m.busy {
 			return m, m.queueGrid()
 		}
 	case "m":
-		if m.ws == wsGrid && !m.busy {
+		if m.ws == wsTools && m.toolTab == 0 && !m.busy {
 			return m, m.cycleMetric()
 		}
 	case "u":
-		if m.ws == wsData && !m.busy {
+		if m.ws == wsTools && m.toolTab == 1 && !m.busy {
 			m.busy = true
 			m.status, m.isErr = "syncing cache from providers…", false
 			return m, m.queueSync()
@@ -194,12 +190,32 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// digits switch workspaces only when the form does not eat them
 	if m.zone != zSidebar {
 		switch ks {
-		case "1", "2", "3":
+		case "1", "2":
 			return m, m.enterWorkspace(workspace(ks[0] - '1'))
 		}
 	}
 
-	// sidebar typing: forward to huh (form focuses inputs)
+	// tools sub-tabs: optimizer <-> data manager
+	if m.ws == wsTools {
+		switch ks {
+		case "[", "]":
+			if m.toolTab == 0 {
+				m.toolTab = 1
+			} else {
+				m.toolTab = 0
+			}
+			m.kpi.ResetTabs()
+			if m.toolTab == 0 && !m.heat.HasData() && !m.busy {
+				return m, m.queueGrid()
+			}
+			if m.toolTab == 1 && !m.busy {
+				m.busy = true
+				m.status, m.isErr = "loading cache inventory…", false
+				return m, m.queueRefreshStatuses()
+			}
+			return m, nil
+		}
+	}
 	if m.zone == zSidebar {
 		cmd, ev := m.sb.Update(k)
 		switch ev {
@@ -212,7 +228,7 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// bottom pane: tabs + row navigation (arrows only)
-	if m.zone == zBottom || ks == "[" || ks == "]" {
+	if m.ws == wsStudio && (m.zone == zBottom || ks == "[" || ks == "]") {
 		switch ks {
 		case "[", "]":
 			m.kpi.CycleTabs()
@@ -260,8 +276,8 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// heatmap navigation (workspace 2, main focus)
-	if m.ws == wsGrid && m.zone == zMain {
+	// heatmap navigation (workspace tools, grid tab, main focus)
+	if m.ws == wsTools && m.toolTab == 0 && m.zone == zMain {
 		switch ks {
 		case "up":
 			m.heat.MoveUp()
