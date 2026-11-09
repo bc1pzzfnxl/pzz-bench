@@ -466,14 +466,9 @@ func BuildForm(fv *FormValues, theme *huh.Theme) *huh.Form {
 	return buildSidebarForm(fv, theme)
 }
 func (s *Sidebar) View() string {
-	title := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorYellow)).
-		Bold(true).
-		MarginBottom(0).
-		Render("⌥ parameters")
 	body := s.form.View()
 	pad := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorPrimaryText)).
 		Width(SidebarWidth - 2)
-	return pad.Render(title + "\n" + body)
+	return pad.Render(body)
 }
