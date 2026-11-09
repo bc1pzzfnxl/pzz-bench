@@ -73,17 +73,19 @@ func (m *MempoolProvider) FetchPrices(ctx context.Context, currency string) ([]p
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 240))
 		return nil, fmt.Errorf("mempool HTTP %d: %s", resp.StatusCode, string(body))
 	}
-	var raw []struct {
-		Time int64 `json:"time"`
-		USD  any   `json:"USD"`
-		EUR  any   `json:"EUR"`
-		GBP  any   `json:"GBP"`
+	var raw struct {
+		Prices []struct {
+			Time int64 `json:"time"`
+			USD  any   `json:"USD"`
+			EUR  any   `json:"EUR"`
+			GBP  any   `json:"GBP"`
+		} `json:"prices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("mempool decode: %w", err)
 	}
-	out := make([]pricePoint, 0, len(raw))
-	for _, e := range raw {
+	out := make([]pricePoint, 0, len(raw.Prices))
+	for _, e := range raw.Prices {
 		var v float64
 		switch currency {
 		case SymBTCEUR, "EUR":
