@@ -375,7 +375,7 @@ func (c *Chart) refresh() {
 	c.ts.SetViewTimeRange(c.winMin, c.winMax)
 	vLo, vHi := c.visYRange(strat, base, inj)
 	c.ts.SetViewYRange(vLo, vHi)
-	c.ts.DrawBrailleAll()
+	c.ts.DrawAll()
 }
 
 // --- navigation ------------------------------------------------------------

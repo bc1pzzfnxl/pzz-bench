@@ -119,7 +119,7 @@ func (o *Oscillator) SetWindow(winMin, winMax time.Time) {
 		return
 	}
 	o.line.SetViewTimeRange(winMin, winMax)
-	o.line.DrawBrailleAll()
+	o.line.DrawAll()
 }
 
 // Resize adapts both sub-renderers when the terminal size changes.
@@ -253,7 +253,7 @@ func (o *Oscillator) render() {
 		}
 	}
 	o.applyStyles(main)
-	o.line.DrawBrailleAll()
+	o.line.DrawAll()
 }
 
 // drawHistogram paints the MACD histogram with Unicode block glyphs: mint
