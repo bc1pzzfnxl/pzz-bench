@@ -455,8 +455,10 @@ func (s *Sidebar) Update(msg tea.Msg) (tea.Cmd, SidebarEvent) {
 	return cmd, SidebarNone
 }
 
-// View renders the sidebar content (28 columns, no border: the app draws the
-// focus ring around panes).
+// BuildForm exposes the sidebar form builder for reuse (wizard/CLI flows).
+func BuildForm(fv *FormValues, theme *huh.Theme) *huh.Form {
+	return buildSidebarForm(fv, theme)
+}
 func (s *Sidebar) View() string {
 	title := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorYellow)).

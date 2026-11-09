@@ -10,7 +10,7 @@ import (
 )
 
 // buildMarkdown renders the full comparative report for one run.
-func buildMarkdown(res *engine.Result, params engine.Params) string {
+func BuildMarkdown(res *engine.Result, params engine.Params) string {
 	rep := res.Report
 	c := res.Cfg
 	var b strings.Builder
@@ -117,7 +117,7 @@ func verdictWord(v float64) string {
 }
 
 // buildTradesCSV renders the strategy trade list as CSV.
-func buildTradesCSV(trades []engine.Trade) string {
+func BuildTradesCSV(trades []engine.Trade) string {
 	var b strings.Builder
 	b.WriteString("exec_time,side,price,btc,fiat,fee,tag\n")
 	for _, t := range trades {

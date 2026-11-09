@@ -438,14 +438,14 @@ func (m *Model) exportReport() {
 	res := m.result
 	params := m.fv.ParamsSnapshot()
 	stamp := time.Now().UTC().Format("20060102-150405")
-	md := buildMarkdown(res, params)
+	md := BuildMarkdown(res, params)
 	mdPath := filepath.Join(m.paths.ExportsDir, fmt.Sprintf("report-%s-%s.md", res.Cfg.Symbol, stamp))
 	if err := os.WriteFile(mdPath, []byte(md), 0o644); err != nil {
 		m.status, m.isErr = "export failed: "+err.Error(), true
 		return
 	}
 	csvPath := filepath.Join(m.paths.ExportsDir, fmt.Sprintf("trades-%s-%s.csv", res.Cfg.Symbol, stamp))
-	if err := os.WriteFile(csvPath, []byte(buildTradesCSV(res.Trades)), 0o644); err != nil {
+	if err := os.WriteFile(csvPath, []byte(BuildTradesCSV(res.Trades)), 0o644); err != nil {
 		m.status, m.isErr = "export failed: "+err.Error(), true
 		return
 	}

@@ -211,22 +211,28 @@ func (m *Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// bottom pane: tabs + row navigation
+	// bottom pane: tabs + row navigation (arrows only)
 	if m.zone == zBottom || ks == "[" || ks == "]" {
 		switch ks {
 		case "[", "]":
 			m.kpi.CycleTabs()
 			return m, nil
-		case "j":
-			m.kpi.MoveDown(1)
-			return m, nil
-		case "k":
+		case "up":
 			m.kpi.MoveUp(1)
 			return m, nil
-		case "t":
+		case "down":
+			m.kpi.MoveDown(1)
+			return m, nil
+		case "pgup":
+			m.kpi.PageUp()
+			return m, nil
+		case "pgdown":
+			m.kpi.PageDown()
+			return m, nil
+		case "home":
 			m.kpi.GotoTop()
 			return m, nil
-		case "b":
+		case "end":
 			m.kpi.GotoBottom()
 			return m, nil
 		}

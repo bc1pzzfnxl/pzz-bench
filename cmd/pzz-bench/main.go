@@ -6,16 +6,21 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/bc1pzzfnxl/pzz-bench/internal/config"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/data"
+	"github.com/bc1pzzfnxl/pzz-bench/internal/engine"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/tui"
+	"github.com/bc1pzzfnxl/pzz-bench/internal/tui/components"
 )
 
 // version is overridable at build time with -ldflags "-X main.version=...".
@@ -24,6 +29,7 @@ var version = "v0.1.0"
 func main() {
 	var (
 		showVersion = flag.Bool("version", false, "print version and exit")
+		wizard      = flag.Bool("wizard", false, "run the guided interactive wizard (no TUI)")
 		symbol      = flag.String("symbol", "", "BTCUSDT | BTCEUR | BTCUSD")
 		timeframe   = flag.String("timeframe", "", "15m | 1h | 4h | 1d | 1w")
 		start       = flag.String("start", "", "backtest window start (YYYY-MM-DD)")
@@ -41,6 +47,11 @@ func main() {
 
 	if *showVersion {
 		fmt.Println("pzz-bench " + version)
+		return
+	}
+
+	if *wizard {
+		runWizard(version)
 		return
 	}
 
@@ -106,6 +117,78 @@ func applyFlags(model *tui.Model, fs flagSet) {
 	model.SyncDefaults()
 }
 
+// runWizard is the guided CLI flow: collect parameters with huh, run the
+// benchmark, and write report.md + trades.csv to ./exports.
+func runWizard(version string) {
+	fmt.Println("⚡ pzz-bench", version, "— guided wizard")
+	fv := &components.FormValues{}
+	fv.InstallDefaults(true)
+	form := components.BuildForm(fv, components.CatppuccinTheme())
+	if err := form.Run(); err != nil {
+		fatalf("wizard cancelled: %v", err)
+	}
+
+	cfg, err := fv.EngineConfig()
+	if err != nil {
+		fatalf("invalid parameters: %v", err)
+	}
+	strat, err := fv.BuildStrategy()
+	if err != nil {
+		fatalf("strategy: %v", err)
+	}
+	if err := engine.Validate(cfg); err != nil {
+		fatalf("invalid config: %v", err)
+	}
+
+	paths := config.Resolve()
+	if err := paths.EnsureDirs(); err != nil {
+		fatalf("config dirs: %v", err)
+	}
+	store, err := data.OpenStore(paths.DatabasePath())
+	if err != nil {
+		fatalf("sqlite: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	loader := data.NewDataLoader(store)
+	loader.Progress = func(label string, n int) {
+		fmt.Printf("\r%s (+%d)", label, n)
+	}
+
+	fmt.Println("ensuring candles…")
+	from := engine.WarmupStart(cfg, strat)
+	candles, err := loader.Ensure(context.Background(), cfg.Symbol, cfg.Timeframe,
+		from.UnixMilli(), cfg.EndDate.UnixMilli())
+	if err != nil {
+		fatalf("data: %v", err)
+	}
+	fmt.Printf("\nrunning %d candles…\n", len(candles))
+
+	res, err := engine.Run(candles, cfg, strat)
+	if err != nil {
+		fatalf("run: %v", err)
+	}
+	rep := res.Report
+
+	// export
+	if err := os.MkdirAll(paths.ExportsDir, 0o755); err != nil {
+		fatalf("exports dir: %v", err)
+	}
+	stamp := time.Now().Format("20060102-150405")
+	mdPath := filepath.Join(paths.ExportsDir, fmt.Sprintf("report-%s-%s.md", cfg.Symbol, stamp))
+	csvPath := filepath.Join(paths.ExportsDir, fmt.Sprintf("trades-%s-%s.csv", cfg.Symbol, stamp))
+	if err := os.WriteFile(mdPath, []byte(tui.BuildMarkdown(res, fv.ParamsSnapshot())), 0o644); err != nil {
+		fatalf("write report: %v", err)
+	}
+	if err := os.WriteFile(csvPath, []byte(tui.BuildTradesCSV(res.Trades)), 0o644); err != nil {
+		fatalf("write trades: %v", err)
+	}
+
+	fmt.Printf("strategy: %s  baseline: %s\n", res.StrategyName, components.BaselineLabels[cfg.BaselineType])
+	fmt.Printf("sats alpha: %+.2f%%   equity alpha: %+.2f%%   MDD: %.2f%%\n",
+		rep.SatsAlpha, rep.EquityAlpha, rep.Strat.MDD*100)
+	fmt.Printf("exported: %s\n         %s\n", mdPath, csvPath)
+}
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "pzz-bench: "+format+"\n", args...)
 	os.Exit(1)

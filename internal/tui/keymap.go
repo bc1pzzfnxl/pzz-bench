@@ -28,7 +28,7 @@ var KeyBindingRows = [][3]string{
 	{"+ / - or k / j", "Chart", "Zoom time window in / out"},
 	{"0", "Chart", "Reset zoom to the full backtest range"},
 	{"[ / ]", "Bottom pane", "Toggle KPI summary <-> trade ledger and scroll"},
-	{"j / k / t / b", "Bottom pane", "Row navigation in the focused table"},
+	{"↑ / ↓ / PgUp / PgDn / Home / End", "Bottom pane", "Row navigation in the focused table"},
 	{"s", "Global", "Save current parameters to presets.toml"},
 	{"e", "Global", "Export report.md + trades CSV to ./exports/"},
 	{"g", "Workspace 2", "Re-run the 2D parameter grid (auto on entry)"},

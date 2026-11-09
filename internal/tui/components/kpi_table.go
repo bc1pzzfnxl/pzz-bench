@@ -35,6 +35,7 @@ type KPIPane struct {
 	kpi    table.Model
 	ledger table.Model
 	tab    BottomTab
+	height int
 }
 
 // NewKPIPane builds both tables at their default size.
@@ -178,11 +179,16 @@ func (p *KPIPane) GotoBottom()    { p.Active().GotoBottom() }
 
 // Resize re-applies the pane size when the window changes.
 func (p *KPIPane) Resize(w, h int) {
+	p.height = h
 	p.kpi.SetWidth(w - 4)
 	p.kpi.SetHeight(h - 4)
 	p.ledger.SetWidth(w - 4)
 	p.ledger.SetHeight(h - 4)
 }
+
+// PageUp / PageDown scroll the active table by roughly one page.
+func (p *KPIPane) PageUp()   { p.Active().MoveUp(max(1, p.height-4)) }
+func (p *KPIPane) PageDown() { p.Active().MoveDown(max(1, p.height-4)) }
 
 // TabLabel renders the tab header with the active tab highlighted.
 func (p *KPIPane) TabLabel() string {
