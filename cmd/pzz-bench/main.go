@@ -128,6 +128,15 @@ func runWizard(version string) {
 		fatalf("wizard cancelled: %v", err)
 	}
 
+	fmt.Printf("\nselected strategy: %s\n", fv.Get("strategy"))
+	if desc, ok := engine.Description(strings.TrimSpace(fv.Get("strategy"))); ok {
+		for _, spec := range desc.Specs {
+			if v := fv.Get(spec.Name); v != "" {
+				fmt.Printf("  %s: %s\n", spec.Display, v)
+			}
+		}
+	}
+
 	cfg, err := fv.EngineConfig()
 	if err != nil {
 		fatalf("invalid parameters: %v", err)

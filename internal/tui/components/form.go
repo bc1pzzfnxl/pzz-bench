@@ -62,8 +62,8 @@ func (fv *FormValues) Set(key, val string) { *fv.Str(key) = val }
 const (
 	defaultSymbol    = "BTCUSDT"
 	defaultTimeframe = "1d"
-	defaultStart     = "2019-01-01"
-	defaultEnd       = "2026-01-01"
+	defaultStart     = "2011-04-28"
+	defaultEnd       = "" // resolved at runtime (today)
 	defaultCapital   = "1000"
 	defaultDCA       = "50"
 	defaultInterval  = "weekly"
@@ -97,7 +97,13 @@ func (fv *FormValues) InstallDefaults(force bool) {
 	set("symbol", defaultSymbol)
 	set("timeframe", defaultTimeframe)
 	set("start", defaultStart)
-	set("end", defaultEnd)
+	if defaultEnd == "" {
+		if force || fv.Get("end") == "" {
+			fv.Set("end", time.Now().UTC().Format("2006-01-02"))
+		}
+	} else {
+		set("end", defaultEnd)
+	}
 	set("capital", defaultCapital)
 	set("dca", defaultDCA)
 	set("interval", defaultInterval)
