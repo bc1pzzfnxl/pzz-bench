@@ -28,7 +28,7 @@ func (m *Model) View() string {
 	}
 
 	top := m.titleBar(m.W)
-	bottom := m.statusBar(m.W)
+	bottom := m.hintBar(m.W)
 	body := m.content()
 	help := ""
 	if m.help {
@@ -37,52 +37,64 @@ func (m *Model) View() string {
 	return top + "\n" + body + help + "\n" + bottom
 }
 
-// titleBar draws the top chrome row.
+// titleBar draws the top chrome row: brand, latest status and the active
+// workspace. Errors render in red so a failed run stays visible.
 func (m *Model) titleBar(w int) string {
 	left := "⚡ pzz-bench — bitcoin accumulation studio"
 	right := workspaceName(m.ws)
 	if m.busy {
 		right += "  ● working…"
 	}
-	fill := w - lipgloss.Width(left) - lipgloss.Width(right) - 1
-	if fill < 1 {
+	status := m.status
+	if status == "" {
+		status = "ready"
+	}
+	statusStyle := styleSubtext.Background(lipgloss.Color(Surface0))
+	if m.isErr {
+		statusStyle = styleBad.Background(lipgloss.Color(Surface0))
+	}
+	sep := "  "
+	avail := w - lipgloss.Width(left) - lipgloss.Width(right) - 2*len(sep)
+	if avail <= 0 {
 		return titleBarStyle.Render(truncate(left, w))
 	}
-	return titleBarStyle.Render(left + strings.Repeat(" ", fill) + right)
+	status = truncate(status, avail)
+	fill := avail - lipgloss.Width(status)
+	return titleBarStyle.Render(left+sep+strings.Repeat(" ", fill)) +
+		statusStyle.Render(status) +
+		titleBarStyle.Render(sep+right)
 }
 
-// statusBar draws the bottom chrome row: status chip + keyboard hints.
-func (m *Model) statusBar(w int) string {
-	st := m.status
-	if st == "" {
-		st = "ready"
-	}
-	chip := statusBarStyle
-	if m.isErr {
-		chip = chip.Foreground(lipgloss.Color("#1E1E2E")).Background(lipgloss.Color(SoftRed))
-	}
-	chipW := lipgloss.Width(st) + 2
-	hintsW := w - chipW - 1
-	hints := truncate(contextualHints(m), maxI(hintsW, 0))
-	line := chip.Render(st) + " " + lipgloss.NewStyle().
-		Foreground(lipgloss.Color(Subtext)).Render(hints)
+// hintBar draws the bottom chrome row: only keys valid in the focused zone.
+func (m *Model) hintBar(w int) string {
+	line := truncate(m.contextualHints(), w)
 	pad := w - lipgloss.Width(line)
 	if pad > 0 {
 		line += strings.Repeat(" ", pad)
 	}
-	return line
+	return styleSubtext.Render(line)
 }
 
-// truncate clips a string to at most w visible columns.
+// truncate clips a string to at most w visible columns, ellipsis included.
 func truncate(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
-	r := []rune(s)
-	if len(r) <= w {
+	if lipgloss.Width(s) <= w {
 		return s
 	}
-	return string(r[:w-1]) + "…"
+	var b strings.Builder
+	used := 0
+	for _, r := range s {
+		rw := lipgloss.Width(string(r))
+		if used+rw > w-1 {
+			break
+		}
+		b.WriteRune(r)
+		used += rw
+	}
+	b.WriteString("…")
+	return b.String()
 }
 
 // content renders the workspace body (or the help overlay above it).
@@ -122,7 +134,7 @@ func (m *Model) studioPane(contentH int) string {
 	// oscillator title
 	oscTitle := "◇ " + components.OscModeName(m.osc.Mode())
 	// bottom title
-	bottomTitle := "▦ " + m.kpi.TabLabel() + " — " + components.BottomTabName(m.kpi.Tab()) + " (j/k/t/b rows)"
+	bottomTitle := "▦ " + m.kpi.TabLabel() + " — " + components.BottomTabName(m.kpi.Tab()) + " (↑/↓ rows)"
 
 	side := box("⌥ parameters", m.sb.View(), sidebarW, chartH+oscH, m.zone == zSidebar)
 	chart := box(chartTitle, m.chart.Legend()+"\n"+m.chart.View(), mainW, chartH, m.zone == zChart)
@@ -137,14 +149,14 @@ func (m *Model) studioPane(contentH int) string {
 // sideMinWidth guards tiny terminals.
 const sideMinWidth = 40
 
-// toolsPane is workspace 2: sidebar + optimizer or data manager.
+// toolsPane is workspace 2: sidebar + optimizer or market cache.
 func (m *Model) toolsPane(contentH int) string {
 	mainW := m.W - sidebarW - 1
 	if mainW < sideMinWidth {
 		mainW = sideMinWidth
 	}
 	var main string
-	if m.toolTab == 0 {
+	if m.toolTab == tabOptimizer {
 		m.heat.SetWidth(mainW - 4)
 		title := "◆ optimizer — " + engine.MetricLabel(m.heat.Metric()) + " (g re-run, ←↑↓→ cells, m metric)"
 		grid := m.heat.Caption()
@@ -165,7 +177,7 @@ func (m *Model) toolsPane(contentH int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, side, " ", main)
 }
 
-// dataBody builds the inventory lines of workspace 3.
+// dataBody builds the inventory lines of the tools cache tab.
 func (m *Model) dataBody(w int) string {
 	var b strings.Builder
 	dim := styleSubtext
@@ -260,27 +272,33 @@ func (m *Model) helpOverlay() string {
 	return lipgloss.Place(m.W, m.H-2, lipgloss.Center, lipgloss.Center, inner)
 }
 
-// contextualHints returns the short hint line for the current workspace/zone.
-func contextualHints(m *Model) string {
-	base := "[1/2] ws · [Tab] focus · [r] run · [s] save · [e] export · [?] help · [q] quit"
-	switch m.ws {
-	case wsStudio:
-		switch m.zone {
-		case zSidebar:
-			return base + " · [Enter] next field"
-		case zChart:
-			return base + " · [v] mode · [h/l] pan · [+/-] zoom · [0] reset"
-		case zBottom:
-			return base + " · [[]/] tabs · [↑/↓] rows · [PgUp/PgDn] page · [Home/End]"
+// contextualHints returns the hint line for the current workspace and focus
+// zone. Only keys that the focused pane actually handles are advertised; while
+// the sidebar owns the keyboard, digits and brackets belong to the form.
+func (m *Model) contextualHints() string {
+	parts := make([]string, 0, 8)
+	if m.zone == zSidebar {
+		parts = append(parts, "[Tab] focus", "[Enter] next", "[r] run", "[s] save")
+	} else {
+		parts = append(parts, "[1/2] ws", "[Tab]")
+		switch {
+		case m.ws == wsTools && m.toolTab == tabOptimizer:
+			parts = append(parts, "[[/]] tab", "[g] grid", "[m] metric", "[←↑↓→]")
+		case m.ws == wsTools && m.toolTab == tabData:
+			parts = append(parts, "[[/]] tab", "[u] sync")
+		case m.zone == zChart:
+			parts = append(parts, "[v] mode", "[h/l] pan", "[+/-] zoom")
+		case m.zone == zBottom:
+			parts = append(parts, "[[/]] tabs", "[↑/↓] rows", "[PgUp/PgDn]")
 		}
-	case wsTools:
-		if m.toolTab == 0 {
-			return base + " · [[]/] tab · [g] run grid · [m] metric · [arrows] navigate"
-		}
-		return base + " · [[]/] tab · [u] sync cache"
 	}
-	return base
+	if m.result != nil {
+		parts = append(parts, "[e] export")
+	}
+	parts = append(parts, "[?] help", "[q] quit")
+	return strings.Join(parts, " · ")
 }
+
 func maxI(a, b int) int {
 	if a > b {
 		return a

@@ -46,12 +46,6 @@ func paneBorder(active bool) lipgloss.Style {
 		BorderForeground(color)
 }
 
-// Status bar (bottom hint row) style.
-var statusBarStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color(BaseBg)).
-	Background(lipgloss.Color(BTCOrange)).
-	Bold(true)
-
 // Title bar style.
 var titleBarStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color(PrimaryText)).
