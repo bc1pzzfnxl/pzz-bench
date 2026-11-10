@@ -62,6 +62,20 @@ keys that the focused zone handles.
 - `u` sync cache from the providers
 - `?` help, `q` quit
 
+## Baseline semantics
+
+- `PURE_DCA`: the initial capital is invested at t0 and every periodic
+  injection is invested on arrival for both the strategy and the baseline.
+- `LUMP_SUM`: the initial capital is invested once at t0 for both curves;
+  periodic injections are disabled (DCA fields are hidden in the sidebar).
+
+## Periods
+
+MA / MACD / RSI periods are counts of the selected timeframe's candles, not
+calendar days. `21/55` defaults assume a daily timeframe; on `1w` they span
+~5 months / ~1 year. The sidebar shows the active timeframe and labels these
+fields `(candles)`.
+
 ## Known limitations
 
 - Drawdown is plotted as a positive depth with negative axis tick labels.

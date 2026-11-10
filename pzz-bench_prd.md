@@ -119,8 +119,9 @@ Every benchmark run takes an immutable configuration struct:
 * `InjectionInterval`: `"daily"` | `"weekly"` | `"biweekly"` | `"monthly"`
 * `FeeRate`: `float64` (Taker fee in decimal, default `0.001` for `0.10%`)
 * `SlippageRate`: `float64` (Execution penalty in decimal, default `0.0005` for `0.05%`)
-* `BaselineType`: `"PURE_DCA"` (invests `PeriodicInjection` immediately upon arrival + `InitialCapital` at $t_0$) or `"LUMP_SUM"` (invests all cash at $t_0$, `PeriodicInjection` = 0).
+* `BaselineType`: `"PURE_DCA"` (invests `PeriodicInjection` immediately upon arrival + `InitialCapital` at $t_0$) or `"LUMP_SUM"` (invests all cash at $t_0$, `PeriodicInjection` = 0). In `LUMP_SUM` mode the DCA fields are hidden and no periodic cash flows are generated for either curve.
 
+* MA / MACD / RSI periods are counts of the selected timeframe's candles (not calendar days); `21/55` defaults assume a daily timeframe.
 ### 4.2. Order Execution & Friction Math
 When the active strategy emits a `BUY` signal with allocation weight $w \in (0, 1]$ at candle close $t$, the order is filled at candle $t+1$ open ($O_{t+1}$):
 
