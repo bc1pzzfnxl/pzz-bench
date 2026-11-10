@@ -10,12 +10,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bc1pzzfnxl/pzz-bench/internal/backtest"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/config"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/data"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/engine"
@@ -50,8 +49,14 @@ func main() {
 		return
 	}
 
+	fs := flagSet{
+		symbol: *symbol, timeframe: *timeframe, start: *start, end: *end,
+		capital: *capital, dca: *dca, interval: *interval, fee: *fee,
+		slippage: *slippage, baseline: *baseline, strategy: *strategy,
+		params: *paramList,
+	}
 	if *wizard {
-		runWizard(version)
+		runWizard(version, fs)
 		return
 	}
 
@@ -67,12 +72,7 @@ func main() {
 
 	loader := data.NewDataLoader(store)
 	model := tui.New(paths, loader)
-	applyFlags(model, flagSet{
-		symbol: *symbol, timeframe: *timeframe, start: *start, end: *end,
-		capital: *capital, dca: *dca, interval: *interval, fee: *fee,
-		slippage: *slippage, baseline: *baseline, strategy: *strategy,
-		params: *paramList,
-	})
+	applyFlags(model, fs)
 
 	fmt.Fprintln(os.Stderr, "⚡ pzz-bench", version, "— press ? for the key bindings")
 	if _, err := tea.NewProgram(model,
@@ -85,57 +85,73 @@ func main() {
 
 // flagSet bundles the CLI overrides of one launch.
 type flagSet struct {
-	symbol, timeframe, start, end   string
-	capital, dca, interval          string
-	fee, slippage, baseline         string
-	strategy, params                string
+	symbol, timeframe, start, end string
+	capital, dca, interval        string
+	fee, slippage, baseline       string
+	strategy, params              string
 }
 
-// applyFlags seeds the sidebar from CLI flags (preset values stay put for
-// omitted flags).
+// applyFlags seeds the sidebar from CLI flags. Omitted flags leave the preset
+// values untouched; only explicit overrides are written.
 func applyFlags(model *tui.Model, fs flagSet) {
-	set := model.SidebarValues().Set
-	set("symbol", fs.symbol)
-	set("timeframe", fs.timeframe)
-	set("start", fs.start)
-	set("end", fs.end)
-	set("capital", fs.capital)
-	set("dca", fs.dca)
-	set("interval", fs.interval)
-	set("fee", fs.fee)
-	set("slippage", fs.slippage)
-	set("baseline", fs.baseline)
-	set("strategy", fs.strategy)
+	applyFormFlags(model.SidebarValues(), fs)
+	model.SyncDefaults()
+}
+
+// applyFormFlags writes the explicit CLI overrides into form values.
+func applyFormFlags(fv *components.FormValues, fs flagSet) {
+	setIf := func(key, val string) {
+		if strings.TrimSpace(val) != "" {
+			fv.Set(key, val)
+		}
+	}
+	setIf("symbol", fs.symbol)
+	setIf("timeframe", fs.timeframe)
+	setIf("start", fs.start)
+	setIf("end", fs.end)
+	setIf("capital", fs.capital)
+	setIf("dca", fs.dca)
+	setIf("interval", fs.interval)
+	setIf("fee", fs.fee)
+	setIf("slippage", fs.slippage)
+	setIf("baseline", fs.baseline)
+	setIf("strategy", fs.strategy)
 	if fs.params != "" {
 		for _, kv := range strings.Split(fs.params, ",") {
 			k, v, ok := strings.Cut(kv, "=")
 			if ok && strings.TrimSpace(k) != "" {
-				set(strings.TrimSpace(k), strings.TrimSpace(v))
+				fv.Set(strings.TrimSpace(k), strings.TrimSpace(v))
 			}
 		}
 	}
-	model.SyncDefaults()
 }
 
-// runWizard is the guided CLI flow: collect parameters with huh, run the
-// benchmark, and write report.md + trades.csv to ./exports.
-func runWizard(version string) {
+// runWizard is the guided CLI flow: collect the window and costs, then the
+// selected strategy's parameters, print the resolved configuration, run the
+// benchmark and write report.md + trades.csv to ./exports.
+func runWizard(version string, fs flagSet) {
 	fmt.Println("⚡ pzz-bench", version, "— guided wizard")
+	theme := components.CatppuccinTheme()
 	fv := &components.FormValues{}
 	fv.InstallDefaults(true)
-	form := components.BuildForm(fv, components.CatppuccinTheme())
-	if err := form.Run(); err != nil {
+	applyFormFlags(fv, fs)
+	fv.InstallDefaults(false)
+
+	core := components.BuildCoreForm(fv, theme).WithWidth(60)
+	if err := core.Run(); err != nil {
 		fatalf("wizard cancelled: %v", err)
 	}
 
-	fmt.Printf("\nselected strategy: %s\n", fv.Get("strategy"))
-	if desc, ok := engine.Description(strings.TrimSpace(fv.Get("strategy"))); ok {
-		for _, spec := range desc.Specs {
-			if v := fv.Get(spec.Name); v != "" {
-				fmt.Printf("  %s: %s\n", spec.Display, v)
-			}
+	// The strategy may have changed in the core form; install its defaults
+	// and ask for its parameters in a second, strategy-specific step.
+	fv.InstallDefaults(false)
+	if params := components.BuildStrategyForm(fv, theme); params != nil {
+		printStrategyHeader(fv)
+		if err := params.WithWidth(60).Run(); err != nil {
+			fatalf("wizard cancelled: %v", err)
 		}
 	}
+	printStrategy(fv)
 
 	cfg, err := fv.EngineConfig()
 	if err != nil {
@@ -165,32 +181,16 @@ func runWizard(version string) {
 	}
 
 	fmt.Println("ensuring candles…")
-	from := engine.WarmupStart(cfg, strat)
-	candles, err := loader.Ensure(context.Background(), cfg.Symbol, cfg.Timeframe,
-		from.UnixMilli(), cfg.EndDate.UnixMilli())
-	if err != nil {
-		fatalf("data: %v", err)
-	}
-	fmt.Printf("\nrunning %d candles…\n", len(candles))
-
-	res, err := engine.Run(candles, cfg, strat)
+	res, err := backtest.Run(context.Background(), loader, cfg, strat)
 	if err != nil {
 		fatalf("run: %v", err)
 	}
 	rep := res.Report
+	fmt.Printf("\nran %d candles\n", rep.Candles)
 
-	// export
-	if err := os.MkdirAll(paths.ExportsDir, 0o755); err != nil {
-		fatalf("exports dir: %v", err)
-	}
-	stamp := time.Now().Format("20060102-150405")
-	mdPath := filepath.Join(paths.ExportsDir, fmt.Sprintf("report-%s-%s.md", cfg.Symbol, stamp))
-	csvPath := filepath.Join(paths.ExportsDir, fmt.Sprintf("trades-%s-%s.csv", cfg.Symbol, stamp))
-	if err := os.WriteFile(mdPath, []byte(tui.BuildMarkdown(res, fv.ParamsSnapshot())), 0o644); err != nil {
-		fatalf("write report: %v", err)
-	}
-	if err := os.WriteFile(csvPath, []byte(tui.BuildTradesCSV(res.Trades)), 0o644); err != nil {
-		fatalf("write trades: %v", err)
+	mdPath, csvPath, err := tui.WriteExports(paths.ExportsDir, cfg.Symbol, res, fv.ParamsSnapshot())
+	if err != nil {
+		fatalf("export: %v", err)
 	}
 
 	fmt.Printf("strategy: %s  baseline: %s\n", res.StrategyName, components.BaselineLabels[cfg.BaselineType])
@@ -198,6 +198,35 @@ func runWizard(version string) {
 		rep.SatsAlpha, rep.EquityAlpha, rep.Strat.MDD*100)
 	fmt.Printf("exported: %s\n         %s\n", mdPath, csvPath)
 }
+
+// printStrategyHeader announces the selected strategy before its parameter step.
+func printStrategyHeader(fv *components.FormValues) {
+	id := strings.TrimSpace(fv.Get("strategy"))
+	if desc, ok := engine.Description(id); ok {
+		fmt.Printf("\nstrategy: %s (%s)\nconfigure its parameters (Enter accepts the defaults):\n", desc.Name, id)
+		return
+	}
+	fmt.Printf("\nstrategy: %s\nconfigure its parameters:\n", id)
+}
+
+// printStrategy prints the resolved strategy and every parameter value.
+func printStrategy(fv *components.FormValues) {
+	id := strings.TrimSpace(fv.Get("strategy"))
+	desc, ok := engine.Description(id)
+	if !ok {
+		fmt.Printf("\nselected strategy: %s\n", id)
+		return
+	}
+	fmt.Printf("\nselected strategy: %s (%s)\n", desc.Name, id)
+	for _, spec := range desc.Specs {
+		value := strings.TrimSpace(fv.Get(spec.Name))
+		if value == "" {
+			value = "(default)"
+		}
+		fmt.Printf("  %-20s %s\n", spec.Display+":", value)
+	}
+}
+
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "pzz-bench: "+format+"\n", args...)
 	os.Exit(1)

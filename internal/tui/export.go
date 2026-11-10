@@ -3,13 +3,34 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bc1pzzfnxl/pzz-bench/internal/engine"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/tui/components"
 )
 
-// buildMarkdown renders the full comparative report for one run.
+// WriteExports writes report.md and trades.csv into dir and returns both paths.
+// The TUI export key and the CLI wizard share this pipeline.
+func WriteExports(dir, symbol string, res *engine.Result, params engine.Params) (string, string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", "", err
+	}
+	stamp := time.Now().UTC().Format("20060102-150405")
+	mdPath := filepath.Join(dir, fmt.Sprintf("report-%s-%s.md", symbol, stamp))
+	csvPath := filepath.Join(dir, fmt.Sprintf("trades-%s-%s.csv", symbol, stamp))
+	if err := os.WriteFile(mdPath, []byte(BuildMarkdown(res, params)), 0o644); err != nil {
+		return "", "", fmt.Errorf("write report: %w", err)
+	}
+	if err := os.WriteFile(csvPath, []byte(BuildTradesCSV(res.Trades)), 0o644); err != nil {
+		return "", "", fmt.Errorf("write trades: %w", err)
+	}
+	return mdPath, csvPath, nil
+}
+
+// BuildMarkdown renders the full comparative report for one run.
 func BuildMarkdown(res *engine.Result, params engine.Params) string {
 	rep := res.Report
 	c := res.Cfg
@@ -65,9 +86,6 @@ func BuildMarkdown(res *engine.Result, params engine.Params) string {
 		rep.SatsAlpha, verdictWord(rep.SatsAlpha), components.BaselineLabels[c.BaselineType])
 	return b.String()
 }
-
-// SeriesParamHint was replaced by the params argument of buildMarkdown.
-var _ = strings.TrimSpace
 
 // abs returns the absolute value of a float.
 func abs(v float64) float64 {

@@ -4,13 +4,12 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/bc1pzzfnxl/pzz-bench/internal/backtest"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/config"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/data"
 	"github.com/bc1pzzfnxl/pzz-bench/internal/engine"
@@ -22,7 +21,7 @@ type workspace uint8
 
 const (
 	wsStudio workspace = iota // 1: chart + sidebar + kpi
-	wsTools                   // 2: optimizer / data manager
+	wsTools                   // 2: optimizer / market cache
 )
 
 // workspaceName renders the workspace label.
@@ -35,6 +34,14 @@ func workspaceName(w workspace) string {
 	}
 }
 
+// tools sub-tabs.
+type toolTab uint8
+
+const (
+	tabOptimizer toolTab = iota // 2D parameter grid
+	tabData                     // market cache inventory
+)
+
 // focus zones.
 type zone uint8
 
@@ -42,7 +49,7 @@ const (
 	zSidebar zone = iota
 	zChart
 	zBottom
-	zMain // ws2/ws3 main pane
+	zMain // tools main pane
 )
 
 // async job messages sent through m.jobs.
@@ -76,13 +83,13 @@ type Model struct {
 	paths  config.Paths
 	loader *data.DataLoader
 
-	W, H int
+	W, H    int
 	ws      workspace
 	zone    zone
-	toolTab int // 0 = optimizer, 1 = data manager
+	toolTab toolTab
 
- fv *components.FormValues
-	sb  *components.Sidebar
+	fv *components.FormValues
+	sb *components.Sidebar
 
 	chart *components.Chart
 	osc   *components.Oscillator
@@ -97,8 +104,8 @@ type Model struct {
 	status string
 	isErr  bool
 
-	result *engine.Result
-	metric engine.MetricKey
+	result   *engine.Result
+	metric   engine.MetricKey
 	lastTask engine.GridTask // axis metadata of the latest sweep
 
 	statuses []data.Status
@@ -194,15 +201,7 @@ func (m *Model) queueRun() tea.Cmd {
 
 	spec := runSpec{cfg: cfg, strat: strat}
 	go func() {
-		from := engine.WarmupStart(spec.cfg, spec.strat)
-		candles, err := m.loader.Ensure(context.Background(),
-			spec.cfg.Symbol, spec.cfg.Timeframe,
-			from.UnixMilli(), spec.cfg.EndDate.UnixMilli())
-		if err != nil {
-			m.jobs <- runDoneMsg{err: err}
-			return
-		}
-		res, err := engine.Run(candles, spec.cfg, spec.strat)
+		res, err := backtest.Run(context.Background(), m.loader, spec.cfg, spec.strat)
 		m.jobs <- runDoneMsg{res: res, err: err}
 	}()
 	return m.waitJob()
@@ -279,9 +278,7 @@ func (m *Model) queueGrid() tea.Cmd {
 			m.jobs <- gridDoneMsg{err: err}
 			return
 		}
-		from := engine.WarmupStart(cfg, strat)
-		candles, err := m.loader.Ensure(context.Background(), cfg.Symbol, cfg.Timeframe,
-			from.UnixMilli(), cfg.EndDate.UnixMilli())
+		candles, err := backtest.LoadCandles(context.Background(), m.loader, cfg, strat)
 		if err != nil {
 			m.jobs <- gridDoneMsg{err: err}
 			return
@@ -321,7 +318,7 @@ func (m *Model) cycleMetric() tea.Cmd {
 	return m.queueGrid()
 }
 
-// queueRefreshStatuses loads the SQLite inventory for workspace 3.
+// queueRefreshStatuses loads the SQLite inventory for the tools cache tab.
 func (m *Model) queueRefreshStatuses() tea.Cmd {
 	go func() {
 		symbol := m.fv.Get("symbol")
@@ -429,21 +426,9 @@ func (m *Model) exportReport() {
 		m.status, m.isErr = "nothing to export yet — press r", true
 		return
 	}
-	if err := os.MkdirAll(m.paths.ExportsDir, 0o755); err != nil {
-		m.status, m.isErr = "export failed: "+err.Error(), true
-		return
-	}
 	res := m.result
-	params := m.fv.ParamsSnapshot()
-	stamp := time.Now().UTC().Format("20060102-150405")
-	md := BuildMarkdown(res, params)
-	mdPath := filepath.Join(m.paths.ExportsDir, fmt.Sprintf("report-%s-%s.md", res.Cfg.Symbol, stamp))
-	if err := os.WriteFile(mdPath, []byte(md), 0o644); err != nil {
-		m.status, m.isErr = "export failed: "+err.Error(), true
-		return
-	}
-	csvPath := filepath.Join(m.paths.ExportsDir, fmt.Sprintf("trades-%s-%s.csv", res.Cfg.Symbol, stamp))
-	if err := os.WriteFile(csvPath, []byte(BuildTradesCSV(res.Trades)), 0o644); err != nil {
+	mdPath, csvPath, err := WriteExports(m.paths.ExportsDir, res.Cfg.Symbol, res, m.fv.ParamsSnapshot())
+	if err != nil {
 		m.status, m.isErr = "export failed: "+err.Error(), true
 		return
 	}
