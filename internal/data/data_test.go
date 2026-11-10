@@ -74,6 +74,40 @@ func TestBinanceParsehttptest(t *testing.T) {
 	}
 }
 
+func TestMempoolFetchPricesPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/historical-price" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"prices":[
+			{"time":1700000000,"USD":-1,"EUR":42000},
+			{"time":1690000000,"USD":30000,"EUR":-1},
+			{"time":1680000000,"USD":25000,"EUR":20000}
+		]}`))
+	}))
+	defer srv.Close()
+
+	mp := &MempoolProvider{BaseURL: srv.URL, HTTP: srv.Client()}
+	usd, err := mp.FetchPrices(context.Background(), "USD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(usd) != 2 {
+		t.Fatalf("USD prices = %d, want 2 (sentinel skipped)", len(usd))
+	}
+	if usd[0].Time != 1680000000*1000 || usd[0].USD != 25000 || usd[1].USD != 30000 {
+		t.Fatalf("USD payload not ascending/decoded: %+v", usd)
+	}
+
+	eur, err := mp.FetchPrices(context.Background(), "EUR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eur) != 2 || eur[0].USD != 20000 || eur[1].USD != 42000 {
+		t.Fatalf("EUR payload mismatch: %+v", eur)
+	}
+}
+
 func TestMempoolSynthStep(t *testing.T) {
 	day := int64(86400000)
 	pts := []pricePoint{
