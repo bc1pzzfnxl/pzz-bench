@@ -1,0 +1,6 @@
+# build artifacts
+/pzz-bench
+/pzz-bench.exe
+
+# generated reports
+/exports/
