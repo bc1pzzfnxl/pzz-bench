@@ -288,3 +288,122 @@ func TestContextCancellation(t *testing.T) {
 		t.Fatal("canceled context must report its state")
 	}
 }
+
+// TestBaselineDCAAccumulates buys the baseline on every periodic injection
+// instead of overwriting its BTC balance.
+func TestBaselineDCAAccumulates(t *testing.T) {
+	candles := make([]Candle, 0, 40)
+	t0 := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 40; i++ {
+		candles = append(candles, Candle{
+			OpenTime:  t0.Add(time.Duration(i) * 24 * time.Hour).UnixMilli(),
+			CloseTime: t0.Add(time.Duration(i+1)*24*time.Hour - time.Millisecond).UnixMilli(),
+			Open:      100, High: 101, Low: 99, Close: 100.5,
+		})
+	}
+	cfg := EngineConfig{
+		Symbol: "TEST", Timeframe: "1d",
+		StartDate: candles[0].Time(), EndDate: time.UnixMilli(candles[39].OpenTime).Add(24 * time.Hour),
+		InitialCapital: 1000, PeriodicInjection: 200, InjectionInterval: InjWeekly,
+		BaselineType: BaselinePureDCA, FeeRate: 0, SlippageRate: 0,
+	}
+	res, err := Run(candles, cfg, &probeSignal{index: -9999, action: ActionHold})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if res.Report.Base.TradeCount < 2 {
+		t.Fatalf("baseline should buy on multiple injections, got %d trades", res.Report.Base.TradeCount)
+	}
+	if res.BaseInjectedTotal <= cfg.InitialCapital {
+		t.Fatalf("base injected total should exceed initial capital, got %.2f", res.BaseInjectedTotal)
+	}
+	if res.BaseBTC[len(res.BaseBTC)-1] <= 0 {
+		t.Fatal("baseline BTC balance should be positive")
+	}
+}
+
+// TestLumpSumInvestsAllAtT0 deploys the initial capital once and never
+// receives periodic injections, for both the strategy and the baseline.
+func TestLumpSumInvestsAllAtT0(t *testing.T) {
+	candles := make([]Candle, 0, 40)
+	t0 := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 40; i++ {
+		candles = append(candles, Candle{
+			OpenTime:  t0.Add(time.Duration(i) * 24 * time.Hour).UnixMilli(),
+			CloseTime: t0.Add(time.Duration(i+1)*24*time.Hour - time.Millisecond).UnixMilli(),
+			Open:      100, High: 101, Low: 99, Close: 100.5,
+		})
+	}
+	cfg := EngineConfig{
+		Symbol: "TEST", Timeframe: "1d",
+		StartDate: candles[0].Time(), EndDate: time.UnixMilli(candles[39].OpenTime).Add(24 * time.Hour),
+		InitialCapital: 1000, PeriodicInjection: 200, InjectionInterval: InjWeekly,
+		BaselineType: BaselineLumpSum, FeeRate: 0, SlippageRate: 0,
+	}
+	res, err := Run(candles, cfg, &probeSignal{index: -9999, action: ActionHold})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if res.TotalInjected != cfg.InitialCapital {
+		t.Fatalf("strategy injected = %.2f, want %.2f (no DCA)", res.TotalInjected, cfg.InitialCapital)
+	}
+	if res.BaseInjectedTotal != cfg.InitialCapital {
+		t.Fatalf("base injected = %.2f, want %.2f (no DCA)", res.BaseInjectedTotal, cfg.InitialCapital)
+	}
+	if res.Report.Base.TradeCount != 1 {
+		t.Fatalf("lump-sum baseline should buy exactly once, got %d", res.Report.Base.TradeCount)
+	}
+	if res.BaseEquity[len(res.BaseEquity)-1] == 0 {
+		t.Fatal("lump-sum baseline equity must not be zero")
+	}
+}
+
+// TestMACDCrossoverDirection buys on a bullish cross and sells on a bearish one.
+func TestMACDCrossoverDirection(t *testing.T) {
+	candles := make([]Candle, 0, 120)
+	t0 := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+	price := 100.0
+	for i := 0; i < 120; i++ {
+		if i < 60 {
+			price = 100.0
+		} else if i < 90 {
+			price += 3.0
+		} else {
+			price -= 3.0
+		}
+		candles = append(candles, Candle{
+			OpenTime:  t0.Add(time.Duration(i) * 24 * time.Hour).UnixMilli(),
+			CloseTime: t0.Add(time.Duration(i+1)*24*time.Hour - time.Millisecond).UnixMilli(),
+			Open:      price, High: price + 1, Low: price - 1, Close: price,
+		})
+	}
+	strat, err := BuildStrategy(IDMACDTrend, Params{"fast": "12", "slow": "26", "signal": "9", "zeroLine": "false"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	cfg := EngineConfig{
+		Symbol: "TEST", Timeframe: "1d",
+		StartDate: candles[0].Time(), EndDate: time.UnixMilli(candles[119].OpenTime).Add(24 * time.Hour),
+		InitialCapital: 1000, FeeRate: 0, SlippageRate: 0,
+		InjectionInterval: InjWeekly, BaselineType: BaselineLumpSum,
+	}
+	res, err := Run(candles, cfg, strat)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(res.Trades) == 0 {
+		t.Fatal("MACD strategy should have traded")
+	}
+	if res.Trades[0].Side != ActionBuy {
+		t.Fatalf("first MACD trade should be a buy on the bullish cross, got %s", res.Trades[0].Side)
+	}
+	hasSell := false
+	for _, tr := range res.Trades {
+		if tr.Side == ActionSell {
+			hasSell = true
+		}
+	}
+	if !hasSell {
+		t.Fatal("MACD strategy should have sold on the bearish cross")
+	}
+}

@@ -184,20 +184,21 @@ func Run(candles []Candle, cfg EngineConfig, strat Strategy) (*Result, error) {
 
 		// 1) injections -----------------------------------------------------
 		if i == iStart {
-			// t0: initial capital. Strategy banks it; DCA baseline buys at
-			// this open ("immediately upon arrival"); LUMP_SUM baseline buys
-			// the whole capital and never receives periodic injections.
+			// t0: both portfolios receive the initial capital. The strategy
+			// banks it; the baseline buys at this open ("immediately upon
+			// arrival"), whether it is DCA or a one-shot lump sum.
 			sInjCum += cfg.InitialCapital
 			sCash += cfg.InitialCapital
 			deltaS += cfg.InitialCapital
 			flowsS = append(flowsS, CashFlow{Time: c.OpenTime, Amount: cfg.InitialCapital})
-			if isDCA {
-				bInjCum += cfg.InitialCapital
-				bCash += cfg.InitialCapital
-				deltaB += cfg.InitialCapital
-				flowsB = append(flowsB, CashFlow{Time: c.OpenTime, Amount: cfg.InitialCapital})
-			}
+			bInjCum += cfg.InitialCapital
+			bCash += cfg.InitialCapital
+			deltaB += cfg.InitialCapital
+			flowsB = append(flowsB, CashFlow{Time: c.OpenTime, Amount: cfg.InitialCapital})
 		} else if isDCA && cfg.PeriodicInjection > 0 {
+			// Periodic DCA cash flows exist only for the pure-DCA baseline;
+			// a lump-sum run deploys the initial capital once and nothing
+			// afterwards, for both the strategy and the baseline.
 			prev := candles[i-1]
 			if injectionPeriodIndex(prev.Time(), cfg.InjectionInterval) != injectionPeriodIndex(c.Time(), cfg.InjectionInterval) {
 				sInjCum += cfg.PeriodicInjection
@@ -211,12 +212,13 @@ func Run(candles []Candle, cfg EngineConfig, strat Strategy) (*Result, error) {
 			}
 		}
 
-		// Baseline always buys everything on arrival (DCA), or exactly once at
-		// t0 (Lump Sum, whose periodic injections are disabled).
-		if isDCA && deltaB > 0 && bCash > 0 {
-			bBTC, bCash, bFees, baseTrades = baselineBuy(candles, i, baseTrades, bCash, 1.0, cfg, c.OpenTime)
-		} else if !isDCA && i == iStart && bCash >= cfg.InitialCapital {
-			bBTC, bCash, bFees, baseTrades = baselineBuy(candles, i, baseTrades, bCash, 1.0, cfg, c.OpenTime)
+		// The baseline invests every arriving cash flow immediately. Lump sum
+		// only has the t0 flow, so this fires exactly once.
+		if deltaB > 0 && bCash > 0 {
+			var bought, fee float64
+			bought, bCash, fee, baseTrades = baselineBuy(candles, i, baseTrades, bCash, 1.0, cfg, c.OpenTime)
+			bBTC += bought
+			bFees += fee
 		}
 
 		// 2) pending strategy signal -> fill at this candle's open -----------

@@ -273,13 +273,14 @@ func (s *StrategyMACDTrend) OnCandle(index int, _ PortfolioState) Signal {
 	if index < s.WarmupCandles() || index > len(s.macd) {
 		return Signal{Action: ActionHold}
 	}
-	cur, prev, curSig, prevSig := s.macd[index-1], s.macd[index], s.sig[index-1], s.sig[index]
+	cur, prev := s.macd[index], s.macd[index-1]
+	curSig, prevSig := s.sig[index], s.sig[index-1]
 	if math.IsNaN(cur) || math.IsNaN(prev) || math.IsNaN(curSig) || math.IsNaN(prevSig) {
 		return Signal{Action: ActionHold}
 	}
 	if prev <= prevSig && cur > curSig {
 		if s.ZeroLineFilter && cur >= 0 {
-			return Signal{Action: ActionHold, Tag: "MACD bull above zero"}
+			return Signal{Action: ActionHold, Tag: "MACD bull filtered above zero"}
 		}
 		return Signal{Action: ActionBuy, Weight: 1.0,
 			Tag: fmt.Sprintf("MACD %.2f crosses %.2f", cur, curSig)}
