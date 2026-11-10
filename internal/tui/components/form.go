@@ -63,7 +63,6 @@ const (
 	defaultSymbol    = "BTCUSDT"
 	defaultTimeframe = "1d"
 	defaultStart     = "2011-04-28"
-	defaultEnd       = "" // resolved at runtime (today)
 	defaultCapital   = "1000"
 	defaultDCA       = "50"
 	defaultInterval  = "weekly"
@@ -97,12 +96,8 @@ func (fv *FormValues) InstallDefaults(force bool) {
 	set("symbol", defaultSymbol)
 	set("timeframe", defaultTimeframe)
 	set("start", defaultStart)
-	if defaultEnd == "" {
-		if force || fv.Get("end") == "" {
-			fv.Set("end", time.Now().UTC().Format("2006-01-02"))
-		}
-	} else {
-		set("end", defaultEnd)
+	if force || fv.Get("end") == "" {
+		fv.Set("end", time.Now().UTC().Format("2006-01-02"))
 	}
 	set("capital", defaultCapital)
 	set("dca", defaultDCA)
@@ -242,10 +237,10 @@ type SidebarEvent uint8
 
 // Sidebar events.
 const (
-	SidebarNone SidebarEvent = iota
-	SidebarRun           // Enter on the last field: (re)run the benchmark
-	SidebarStrategy      // active strategy changed: rebuild chart pages too
-	SidebarAborted       // huh consumed a quit key: form state recovered
+	SidebarNone     SidebarEvent = iota
+	SidebarRun                   // Enter on the last field: (re)run the benchmark
+	SidebarStrategy              // active strategy changed: rebuild chart pages too
+	SidebarAborted               // huh consumed a quit key: form state recovered
 )
 
 // Sidebar is the huh-powered parameter panel (fixed 28-column column budget).
@@ -271,7 +266,9 @@ func (s *Sidebar) rebuild() {
 	s.prevStr = strings.TrimSpace(s.fv.Get("strategy"))
 }
 
-func buildSidebarForm(fv *FormValues, theme *huh.Theme) *huh.Form {
+// coreGroups builds the shared parameters: market, window, costs and the
+// strategy selector. Strategy-specific fields are appended by strategyGroup.
+func coreGroups(fv *FormValues) []*huh.Group {
 	strategies := engine.StrategyIDs()
 	stratOptions := make([]huh.Option[string], 0, len(strategies))
 	for _, id := range strategies {
@@ -304,7 +301,7 @@ func buildSidebarForm(fv *FormValues, theme *huh.Theme) *huh.Form {
 		huh.NewOption(InjectIntervalLabels[engine.InjMonthly], engine.InjMonthly),
 	}
 
-	groups := []*huh.Group{
+	return []*huh.Group{
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Key("symbol").
@@ -321,12 +318,12 @@ func buildSidebarForm(fv *FormValues, theme *huh.Theme) *huh.Form {
 			huh.NewInput().
 				Key("start").
 				Title("start").
-				Placeholder("2019-01-01").
+				Placeholder("2011-04-28").
 				Value(fv.Str("start")),
 			huh.NewInput().
 				Key("end").
 				Title("end").
-				Placeholder("2026-01-01").
+				Placeholder("today").
 				Value(fv.Str("end")),
 			huh.NewInput().
 				Key("capital").
@@ -367,46 +364,78 @@ func buildSidebarForm(fv *FormValues, theme *huh.Theme) *huh.Form {
 				Value(fv.Str("strategy")),
 		),
 	}
+}
 
-	// Strategy-specific parameters: one dynamic group rebuilt whenever the
-	// active strategy changes (values persist per key in FormValues).
-	if d, ok := engine.Description(strings.TrimSpace(fv.Get("strategy"))); ok {
-		fields := make([]huh.Field, 0, len(d.Specs))
-		for _, spec := range d.Specs {
-			switch spec.Kind {
-			case engine.KindSelect:
-				opts := make([]huh.Option[string], 0, len(spec.Options))
-				for _, o := range spec.Options {
-					opts = append(opts, huh.NewOption(strings.ToLower(o), o))
-				}
-				fields = append(fields, huh.NewSelect[string]().
-					Key(spec.Name).
-					Title(strings.ToLower(spec.Display)).
-					Options(opts...).
-					Value(fv.Str(spec.Name)))
-			case engine.KindBool:
-				fields = append(fields, huh.NewSelect[string]().
-					Key(spec.Name).
-					Title(strings.ToLower(spec.Display)).
-					Options(huh.NewOption("true", "true"), huh.NewOption("false", "false")).
-					Value(fv.Str(spec.Name)))
-			default:
-				fields = append(fields, huh.NewInput().
-					Key(spec.Name).
-					Title(strings.ToLower(spec.Display)).
-					Placeholder(spec.Default).
-					Value(fv.Str(spec.Name)))
+// strategyGroup builds the active strategy's parameter fields. Values persist
+// per key in FormValues, so a rebuild never loses user input.
+func strategyGroup(fv *FormValues) *huh.Group {
+	d, ok := engine.Description(strings.TrimSpace(fv.Get("strategy")))
+	if !ok {
+		return nil
+	}
+	fields := make([]huh.Field, 0, len(d.Specs))
+	for _, spec := range d.Specs {
+		switch spec.Kind {
+		case engine.KindSelect:
+			opts := make([]huh.Option[string], 0, len(spec.Options))
+			for _, o := range spec.Options {
+				opts = append(opts, huh.NewOption(strings.ToLower(o), o))
 			}
-		}
-		if len(fields) > 0 {
-			groups = append(groups, huh.NewGroup(fields...))
+			fields = append(fields, huh.NewSelect[string]().
+				Key(spec.Name).
+				Title(strings.ToLower(spec.Display)).
+				Options(opts...).
+				Value(fv.Str(spec.Name)))
+		case engine.KindBool:
+			fields = append(fields, huh.NewSelect[string]().
+				Key(spec.Name).
+				Title(strings.ToLower(spec.Display)).
+				Options(huh.NewOption("true", "true"), huh.NewOption("false", "false")).
+				Value(fv.Str(spec.Name)))
+		default:
+			fields = append(fields, huh.NewInput().
+				Key(spec.Name).
+				Title(strings.ToLower(spec.Display)).
+				Placeholder(spec.Default).
+				Value(fv.Str(spec.Name)))
 		}
 	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return huh.NewGroup(fields...)
+}
 
+func newForm(groups []*huh.Group, theme *huh.Theme) *huh.Form {
 	return huh.NewForm(groups...).
 		WithTheme(theme).
-		WithWidth(24).
+		WithWidth(SidebarWidth - 4).
 		WithShowHelp(false)
+}
+
+// buildSidebarForm composes the full sidebar: shared fields + strategy params.
+func buildSidebarForm(fv *FormValues, theme *huh.Theme) *huh.Form {
+	groups := coreGroups(fv)
+	if g := strategyGroup(fv); g != nil {
+		groups = append(groups, g)
+	}
+	return newForm(groups, theme)
+}
+
+// BuildCoreForm builds the shared parameters for standalone flows (wizard).
+// Callers can widen it with huh.Form.WithWidth.
+func BuildCoreForm(fv *FormValues, theme *huh.Theme) *huh.Form {
+	return newForm(coreGroups(fv), theme)
+}
+
+// BuildStrategyForm builds the active strategy's parameter form. It returns
+// nil when the strategy has no parameters.
+func BuildStrategyForm(fv *FormValues, theme *huh.Theme) *huh.Form {
+	g := strategyGroup(fv)
+	if g == nil {
+		return nil
+	}
+	return newForm([]*huh.Group{g}, theme)
 }
 
 // Update forwards a bubbletea message to the inner huh form. Quit keys must
@@ -461,10 +490,7 @@ func (s *Sidebar) Update(msg tea.Msg) (tea.Cmd, SidebarEvent) {
 	return cmd, SidebarNone
 }
 
-// BuildForm exposes the sidebar form builder for reuse (wizard/CLI flows).
-func BuildForm(fv *FormValues, theme *huh.Theme) *huh.Form {
-	return buildSidebarForm(fv, theme)
-}
+// View renders the sidebar form inside its fixed-width column.
 func (s *Sidebar) View() string {
 	body := s.form.View()
 	pad := lipgloss.NewStyle().
