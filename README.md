@@ -22,25 +22,45 @@ go build -o pzz-bench ./cmd/pzz-bench
 
 ```sh
 ./pzz-bench
+./pzz-bench --wizard
 ./pzz-bench --version
 ./pzz-bench --symbol BTCUSDT --timeframe 1d --start 2020-01-01 --end 2026-01-01 \
   --capital 1000 --dca 50 --interval weekly --fee 0.10 --slippage 0.05 \
   --baseline PURE_DCA --strategy MA_CROSS --param fast=50,slow=200
 ```
 
+`--wizard` skips the TUI and walks through the same parameters in two steps:
+the shared window/costs form first, then the selected strategy's fields. It
+prints the resolved strategy parameters, runs the benchmark and writes the
+report and trades CSV to `./exports`.
+
 Data is cached in SQLite (`market.db` under the XDG data dir) and filled on
 demand from Binance (BTCUSDT, BTCEUR) and mempool.space (BTCUSD, pre-2017
 history).
 
-## Keys (PRD 6.4)
+## Workspaces
 
-- `tab` / `shift+tab` cycle focus: sidebar → chart → bottom
-- `1`/`2`/`3` switch workspaces (studio / grid / data) outside the sidebar
-- `r` run benchmark, `g` run grid, `m` cycle grid metric, `u` sync cache
+- **Studio** (`1`): parameter sidebar, line-run equity/sats/drawdown chart,
+  oscillator, and the KPI / trade-ledger tables.
+- **Tools** (`2`): `[`/`]` switch between the 2D parameter-grid optimizer and
+  the market-cache inventory.
+
+The title bar shows the latest status (errors in red); the footer only lists
+keys that the focused zone handles.
+
+## Keys
+
+- `tab` / `shift+tab` cycle focus: sidebar → chart → results (studio) or
+  sidebar → main (tools)
+- `1`/`2` switch workspaces outside the sidebar
+- `r` run benchmark, `s` save preset, `e` export report + trades CSV
 - `v` cycle chart mode (fiat equity → sats → drawdown)
 - `h`/`l` pan, `+`/`-` zoom, `0` reset
-- `[`/`]` cycle bottom tabs, `j`/`k` rows, `t`/`b` top/bottom
-- `s` save preset, `e` export report + trades CSV, `?` help, `q` quit
+- `[`/`]` cycle result tabs in the studio, optimizer/cache sub-tabs in tools
+- `↑`/`↓` rows, `PgUp`/`PgDn` page, `Home`/`End` jump in the focused table
+- `g` run grid, `m` cycle grid metric, arrows navigate heatmap cells
+- `u` sync cache from the providers
+- `?` help, `q` quit
 
 ## Known limitations
 

@@ -11,6 +11,26 @@
 
 ---
 
+## Implementation status (2026)
+
+The shipped binary follows this spec with these deliberate simplifications:
+
+- **Two workspaces**: `1` Studio and `2` Tools. The optimizer and the market
+  cache are sub-tabs of Tools (`[`/`]`), not separate workspaces.
+- **Line-run charting**: `ntcharts` renders with its line-run style
+  (`╭╮╰╯─│`), not Braille cells. The chart modes (fiat equity, sats stack,
+  drawdown) and the oscillator are unchanged.
+- **Arrow-only tables**: the result tables navigate with `↑`/`↓`, `PgUp`/`PgDn`
+  and `Home`/`End`; the vim row keys were removed.
+- **Guided wizard**: `--wizard` runs the same parameters through a two-phase
+  `huh` flow (shared form, then strategy parameters) and exports
+  `report-*.md` + `trades-*.csv` without starting the TUI.
+- **Defaults**: the window starts at `2011-04-28` and ends today; the status
+  line lives in the title bar and the footer only lists keys valid for the
+  focused zone.
+
+---
+
 ## 1. Executive Summary & Product Vision
 
 `pzz-bench` is a deterministic, high-speed, terminal-based (TUI) backtesting and benchmarking engine designed specifically for Bitcoin ($BTC) accumulation and active trading strategies. 
@@ -29,7 +49,7 @@ To avoid scope creep and ambiguity during engineering, the following technical d
 4. **Local Storage Engine:** **SQLite** via `modernc.org/sqlite` stored in XDG-compliant directories (`~/.local/share/pzz-bench/market.db`). Network calls only fetch the missing delta between the latest cached timestamp and `now()`.
 5. **Execution Model (Zero Look-Ahead Bias):** Indicators are computed on candle `Close[t]`. Signals generated at `t` are strictly executed at **`Open[t+1]`** plus simulated slippage and exchange fees.
 6. **Position Direction:** **Spot Long-Only (`BTC/USDT` or `BTC/EUR`)**. No shorting, no leverage, no liquidation mechanics in v1.0. You are either holding Fiat (Dry Powder), holding BTC, or rebalancing between the two.
-7. **TUI Framework:** Charmbracelet `bubbletea` (v1.3+ / v2 compatible architecture), `lipgloss` for layout and Catppuccin Mocha + Bitcoin Orange styling, `huh` for interactive parameter forms, and `NimbleMarkets/ntcharts` for Braille canvas plotting.
+7. **TUI Framework:** Charmbracelet `bubbletea` (v1.3+ / v2 compatible architecture), `lipgloss` for layout and Catppuccin Mocha + Bitcoin Orange styling, `huh` for interactive parameter forms, and `NimbleMarkets/ntcharts` for line-run canvas plotting.
 
 ---
 
@@ -60,7 +80,7 @@ pzz-bench/
 │       ├── theme.go            # Lip Gloss styles & color palette definitions
 │       └── components/
 │           ├── form.go         # `huh` configuration sidebar
-│           ├── chart.go        # `ntcharts` Braille dual-equity + drawdown renderer
+│           ├── chart.go        # `ntcharts` line-run dual-equity + drawdown renderer
 │           ├── osc_chart.go    # `ntcharts` MACD histogram & RSI sub-chart
 │           ├── kpi_table.go    # `bubbles/table` comparative metrics view
 │           └── heatmap.go      # 2D ANSI grid for parameter optimization results
@@ -217,19 +237,19 @@ Defined in `internal/tui/theme.go` via `lipgloss.Color`:
 │ │ Sortino Ratio   │ 2.41              │ 1.38           │ +1.03         │                │ │
 │ │ Win Rate (34tx) │ 64.7%             │ N/A (100% Buy) │ Fee: $142.10  │                │ │
 │ ╰───────────────────────────────────────────────────────────────────────────────────────╯ │
-│  [1/2/3] Views  [h/l] Pan  [+/-] Zoom  [v] Mode  [r] Run  [g] Grid Opt  [e] Export  [q]   │
+│  [1/2] Views  [Tab] Focus  [h/l] Pan  [+/-] Zoom  [v] Mode  [r] Run  [e] Export  [?]    │
 ╰───────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ### 6.3. Responsive Multi-Pane Layout & Modes
-The TUI requires a minimum terminal size of `100x30` (gracefully rendering a centered resize warning if smaller) and operates across **3 primary workspaces** switched via `1`, `2`, `3`:
+The TUI requires a minimum terminal size of `100x30` (gracefully rendering a centered resize warning if smaller) and operates across **2 primary workspaces** switched via `1`, `2`:
 
 #### Workspace `[1]`: Main Benchmark Studio (Default)
 * **Left Pane (28 cols fixed) — `huh` Interactive Config:**
   * Scrollable, rounded-border form allowing live editing of Strategy, Timeframe, Date Range, Initial Capital, Periodic DCA, Fee %, and Strategy-specific parameters.
   * Hitting `Enter` on the final field or pressing `r` anywhere triggers an immediate re-computation (takes `<5ms` in Go for 2,500 daily candles) and updates the charts.
 * **Top-Right Pane (Dynamic Width, 55% Height) — `ntcharts` Dual Equity / Price Canvas:**
-  * Uses `timeserieslinechart` with Braille rendering (`2x4` dots per terminal cell).
+  * Uses `timeserieslinechart` with line-run rendering (`╭╮╰╯─│`, one cell per point segment).
   * **Toggleable Chart Modes (`v` key):**
     1. *Fiat Equity Curve ($/€):* Strategy Total Value vs. Baseline DCA Total Value vs. Total Cash Injected.
     2. *Sats Accumulation Curve (sats):* Total BTC/sats held by Strategy vs. Baseline DCA over time.
@@ -239,27 +259,31 @@ The TUI requires a minimum terminal size of `100x30` (gracefully rendering a cen
 * **Bottom Pane (Full Width, 25% Height) — Comparative KPI & Trade Log Table:**
   * Sub-tabs (`[` and `]`): **KPI Summary Table** (side-by-side Strategy vs. Baseline with colored Delta pills) and **Execution Ledger** (scrollable table of every `BUY`/`SELL` trade, timestamp, price, fee paid, and trigger tag).
 
-#### Workspace `[2]`: 2D Parameter Grid Optimizer (Heatmap View)
-* Triggered via `2` or `g`. Spawns a pool of `runtime.NumCPU()` goroutines to run hundreds of backtest permutations concurrently (e.g., testing `FastEMA` from `5` to `60` step `5` on the X-axis against `SlowEMA` from `40` to `240` step `20` on the Y-axis).
-* Renders an ANSI TrueColor heatmap matrix where each cell displays the **Sats Alpha ($\alpha_{\text{BTC}}$)** or **Sortino Ratio** for that coordinate pair, allowing instant visual identification of robust parameter clusters versus overfitted outliers.
-
-#### Workspace `[3]`: Data & Cache Manager
-* Displays SQLite database status per timeframe (`BTCUSDT 15m`, `1h`, `4h`, `1d`, `1w`), total candle count, earliest/latest timestamps, disk usage, and a live progress bar (`bubbles/progress`) when syncing historical archives from Binance/Mempool.
+#### Workspace `[2]`: Tools (Optimizer + Market Cache)
+* The main pane has two sub-tabs toggled with `[` / `]`:
+  * **2D Parameter Grid Optimizer** — triggered via `g` or on first entry. Spawns a pool of `runtime.NumCPU()` goroutines to run hundreds of backtest permutations concurrently (e.g. `FastEMA` from `5` to `60` step `5` on the X-axis against `SlowEMA` from `40` to `240` step `20` on the Y-axis). Renders an ANSI TrueColor heatmap matrix where each cell displays the **Sats Alpha ($\alpha_{\text{BTC}}$)** or **Sortino Ratio** for that coordinate pair.
+  * **Market Cache** — displays SQLite database status per timeframe (`BTCUSDT 15m`, `1h`, `4h`, `1d`, `1w`), total candle count, earliest/latest timestamps and disk usage. Press `u` to sync historical archives from Binance/Mempool.
 
 ### 6.4. Complete Keyboard Navigation Matrix
 | Keybinding | Scope | Action |
 | :--- | :--- | :--- |
-| `Tab` / `Shift+Tab` | Global | Cycle focus between Sidebar Form, Main Chart, and Bottom Table |
-| `1` / `2` / `3` | Global | Switch between `[1] Studio`, `[2] Grid Optimizer`, `[3] Data Manager` |
+| `Tab` / `Shift+Tab` | Global | Cycle focus: sidebar → chart → results (studio) or sidebar → main (tools) |
+| `1` / `2` | Global | Switch between `[1] Studio` and `[2] Tools` (outside the sidebar) |
 | `r` / `Ctrl+R` | Global | Execute / Re-run benchmark with current parameters |
 | `v` | Chart Focus | Cycle chart mode: `Fiat Equity ($)` $\rightarrow$ `Sats Stack (sats)` $\rightarrow$ `Drawdown (%)` |
 | `h` / `l` or `←` / `→` | Chart Focus | Pan time window left / right |
 | `+` / `-` or `k` / `j` | Chart Focus | Zoom time window in / out |
 | `0` | Chart Focus | Reset zoom to 100% full backtest range |
-| `[` / `]` | Bottom Pane | Toggle between `KPI Comparison` and `Trade Execution Ledger` |
+| `[` / `]` | Studio results | Toggle between `KPI Comparison` and `Trade Execution Ledger` |
+| `↑` / `↓` / `PgUp` / `PgDn` / `Home` / `End` | Results table | Row navigation in the focused table |
+| `[` / `]` | Tools | Switch between the optimizer and the market cache |
+| `g` | Tools · optimizer | Re-run the 2D parameter grid |
+| `m` | Tools · optimizer | Cycle heatmap metric: Sats Alpha → Sortino → Equity Alpha |
+| `←` `↑` `↓` `→` | Tools · optimizer | Navigate heatmap cells |
+| `u` | Tools · cache | Pull missing candles from Binance/Mempool |
 | `s` | Global | Save current parameter configuration to `~/.config/pzz-bench/presets.toml` |
 | `e` | Global | Export full benchmark report + Markdown table + CSV trade ledger to `./exports/` |
-| `?` | Global | Toggle floating `bubbles/help` keybinding overlay |
+| `?` | Global | Toggle the keybinding overlay |
 | `q` / `Ctrl+C` | Global | Graceful exit (flushes SQLite WAL and restores terminal state) |
 
 ---
@@ -283,5 +307,5 @@ The TUI requires a minimum terminal size of `100x30` (gracefully rendering a cen
   * Write unit tests verifying zero look-ahead bias and exact fee deduction.
 * **Milestone 3: Charm TUI Shell & Form Binding (`internal/tui`)**
   * Scaffold the `bubbletea` root model, responsive `lipgloss` layout, and `huh` sidebar form wired to trigger asynchronous `tea.Cmd` backtest runs.
-* **Milestone 4: Braille Charting & Grid Optimizer (`internal/tui/components`)**
-  * Integrate `ntcharts` dual-series Braille line charts, block-character MACD histograms, and the concurrent 2D heatmap optimizer view.
+* **Milestone 4: Line-Run Charting & Grid Optimizer (`internal/tui/components`)**
+  * Integrate `ntcharts` dual-series line-run charts, block-character MACD histograms, and the concurrent 2D heatmap optimizer view.
