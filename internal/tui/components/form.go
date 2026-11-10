@@ -304,32 +304,24 @@ func coreGroups(fv *FormValues) []*huh.Group {
 	return []*huh.Group{
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Key("symbol").
-				Title("pair").
-				Options(symbolOptions...).
-				Value(fv.Str("symbol")),
+				Key("strategy").
+				Title("strategy").
+				Options(stratOptions...).
+				Value(fv.Str("strategy")),
 			huh.NewSelect[string]().
-				Key("timeframe").
-				Title("timeframe").
-				Options(tfOptions...).
-				Value(fv.Str("timeframe")),
-		),
-		huh.NewGroup(
-			huh.NewInput().
-				Key("start").
-				Title("start").
-				Placeholder("2011-04-28").
-				Value(fv.Str("start")),
-			huh.NewInput().
-				Key("end").
-				Title("end").
-				Placeholder("today").
-				Value(fv.Str("end")),
+				Key("baseline").
+				Title("baseline").
+				Options(baselineOptions...).
+				Value(fv.Str("baseline")),
 			huh.NewInput().
 				Key("capital").
 				Title("capital").
 				Placeholder("1000").
 				Value(fv.Str("capital")),
+		),
+		// DCA only makes sense for the pure-DCA baseline; a lump sum
+		// deploys the initial capital once and receives no periodic cash.
+		huh.NewGroup(
 			huh.NewSelect[string]().
 				Key("interval").
 				Title("dca interval").
@@ -340,6 +332,30 @@ func coreGroups(fv *FormValues) []*huh.Group {
 				Title("dca amount").
 				Placeholder("50").
 				Value(fv.Str("dca")),
+		).WithHideFunc(func() bool {
+			return strings.TrimSpace(fv.Get("baseline")) != engine.BaselinePureDCA
+		}),
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Key("symbol").
+				Title("pair").
+				Options(symbolOptions...).
+				Value(fv.Str("symbol")),
+			huh.NewSelect[string]().
+				Key("timeframe").
+				Title("timeframe").
+				Options(tfOptions...).
+				Value(fv.Str("timeframe")),
+			huh.NewInput().
+				Key("start").
+				Title("start").
+				Placeholder("2011-04-28").
+				Value(fv.Str("start")),
+			huh.NewInput().
+				Key("end").
+				Title("end").
+				Placeholder("today").
+				Value(fv.Str("end")),
 		),
 		huh.NewGroup(
 			huh.NewInput().
@@ -352,18 +368,27 @@ func coreGroups(fv *FormValues) []*huh.Group {
 				Title("slippage %").
 				Placeholder("0.05").
 				Value(fv.Str("slippage")),
-			huh.NewSelect[string]().
-				Key("baseline").
-				Title("baseline").
-				Options(baselineOptions...).
-				Value(fv.Str("baseline")),
-			huh.NewSelect[string]().
-				Key("strategy").
-				Title("strategy").
-				Options(stratOptions...).
-				Value(fv.Str("strategy")),
 		),
 	}
+}
+
+// candlePeriodParams are strategy parameters expressed in number of candles of
+// the selected timeframe, not in days/weeks.
+var candlePeriodParams = map[string]bool{
+	"fast":   true,
+	"slow":   true,
+	"period": true,
+	"signal": true,
+}
+
+// fieldTitle renders a strategy parameter label, appending "(candles)" when the
+// value is a candle count so the timeframe dependency is obvious.
+func fieldTitle(spec engine.ParamSpec) string {
+	title := strings.ToLower(spec.Display)
+	if candlePeriodParams[spec.Name] {
+		title += " (candles)"
+	}
+	return title
 }
 
 // strategyGroup builds the active strategy's parameter fields. Values persist
@@ -383,19 +408,19 @@ func strategyGroup(fv *FormValues) *huh.Group {
 			}
 			fields = append(fields, huh.NewSelect[string]().
 				Key(spec.Name).
-				Title(strings.ToLower(spec.Display)).
+				Title(fieldTitle(spec)).
 				Options(opts...).
 				Value(fv.Str(spec.Name)))
 		case engine.KindBool:
 			fields = append(fields, huh.NewSelect[string]().
 				Key(spec.Name).
-				Title(strings.ToLower(spec.Display)).
+				Title(fieldTitle(spec)).
 				Options(huh.NewOption("true", "true"), huh.NewOption("false", "false")).
 				Value(fv.Str(spec.Name)))
 		default:
 			fields = append(fields, huh.NewInput().
 				Key(spec.Name).
-				Title(strings.ToLower(spec.Display)).
+				Title(fieldTitle(spec)).
 				Placeholder(spec.Default).
 				Value(fv.Str(spec.Name)))
 		}
@@ -413,11 +438,21 @@ func newForm(groups []*huh.Group, theme *huh.Theme) *huh.Form {
 		WithShowHelp(false)
 }
 
-// buildSidebarForm composes the full sidebar: shared fields + strategy params.
+// buildSidebarForm composes the full sidebar: shared fields + strategy params,
+// with the strategy's own parameters inserted immediately after the first core
+// group (strategy/baseline/capital) so they stay visually tied to the choice.
 func buildSidebarForm(fv *FormValues, theme *huh.Theme) *huh.Form {
 	groups := coreGroups(fv)
 	if g := strategyGroup(fv); g != nil {
-		groups = append(groups, g)
+		out := make([]*huh.Group, 0, len(groups)+1)
+		if len(groups) > 0 {
+			out = append(out, groups[0])
+			out = append(out, g)
+			out = append(out, groups[1:]...)
+		} else {
+			out = append(out, g)
+		}
+		groups = out
 	}
 	return newForm(groups, theme)
 }
@@ -490,11 +525,22 @@ func (s *Sidebar) Update(msg tea.Msg) (tea.Cmd, SidebarEvent) {
 	return cmd, SidebarNone
 }
 
-// View renders the sidebar form inside its fixed-width column.
+// View renders the sidebar form inside its fixed-width column, followed by a
+// compact footer advertising the run action and the active timeframe (so candle
+// counts can be read in the right unit).
 func (s *Sidebar) View() string {
 	body := s.form.View()
+	tf := strings.TrimSpace(s.fv.Get("timeframe"))
+	if tf == "" {
+		tf = defaultTimeframe
+	}
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(colorSubtext)).
+		Width(SidebarWidth - 2).
+		Render("tf: " + tf + " · periods in candles\n" +
+			lipgloss.NewStyle().Foreground(lipgloss.Color(colorMint)).Bold(true).Render("▶ run [r]"))
 	pad := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(colorPrimaryText)).
 		Width(SidebarWidth - 2)
-	return pad.Render(body)
+	return pad.Render(body) + "\n" + footer
 }

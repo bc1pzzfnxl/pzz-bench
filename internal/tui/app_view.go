@@ -280,7 +280,7 @@ func (m *Model) contextualHints() string {
 	if m.zone == zSidebar {
 		parts = append(parts, "[Tab] focus", "[Enter] next", "[r] run", "[s] save")
 	} else {
-		parts = append(parts, "[1/2] ws", "[Tab]")
+		parts = append(parts, "[1/2] ws", "[Tab]", "[r] run")
 		switch {
 		case m.ws == wsTools && m.toolTab == tabOptimizer:
 			parts = append(parts, "[[/]] tab", "[g] grid", "[m] metric", "[←↑↓→]")

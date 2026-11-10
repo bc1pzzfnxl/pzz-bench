@@ -25,6 +25,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyResult(t.res)
+		// A successful run lands the user on the analysis panes.
+		if m.ws == wsStudio {
+			m.zone = zChart
+		}
 		frm := isoDate(t.res.Times[0])
 		to := isoDate(t.res.Times[len(t.res.Times)-1])
 		alpha := ""
