@@ -227,7 +227,7 @@ func diffPts(a, b float64) string {
 	if isNaN(a) || isNaN(b) {
 		return "n/a"
 	}
-	return deltaStrat((a - b) * 100, 1)
+	return deltaStrat((a-b)*100, 1)
 }
 
 // diffRatio compares two ratios, valid when b != 0.
@@ -235,7 +235,7 @@ func diffRatio(a, b float64) string {
 	if isNaN(a) || isNaN(b) || b == 0 {
 		return "n/a"
 	}
-	return deltaStrat((a - b) / vAbs(b) * 100, 1)
+	return deltaStrat((a-b)/vAbs(b)*100, 1)
 }
 
 // mddStr renders drawdown as "-22.4%".

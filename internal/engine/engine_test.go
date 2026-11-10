@@ -28,9 +28,9 @@ type probeSignal struct {
 	beforeState float64 // BTC held before its fill (probe)
 }
 
-func (p *probeSignal) ID() string            { return "PROBE" }
-func (p *probeSignal) Name() string          { return "Probe" }
-func (p *probeSignal) WarmupCandles() int    { return 1 }
+func (p *probeSignal) ID() string         { return "PROBE" }
+func (p *probeSignal) Name() string       { return "Probe" }
+func (p *probeSignal) WarmupCandles() int { return 1 }
 func (p *probeSignal) ExportSeries() map[string][]float64 {
 	return nil
 }
@@ -57,11 +57,11 @@ func TestZeroLookaheadFill(t *testing.T) {
 	probe := &probeSignal{index: 1, action: ActionBuy, weight: 1.0}
 	cfg := EngineConfig{
 		Symbol: "TEST", Timeframe: "1d",
-		StartDate:     candles[0].Time(),
-		EndDate:       candles[3].Time().Add(24 * time.Hour),
+		StartDate:      candles[0].Time(),
+		EndDate:        candles[3].Time().Add(24 * time.Hour),
 		InitialCapital: 1000, FeeRate: 0, SlippageRate: 0,
 		InjectionInterval: InjWeekly,
-		BaselineType: BaselinePureDCA,
+		BaselineType:      BaselinePureDCA,
 	}
 	res, err := Run(candles, cfg, probe)
 	if err != nil {
@@ -117,12 +117,12 @@ func TestInjectionsBoundary(t *testing.T) {
 	}
 	cfg := EngineConfig{
 		Symbol: "TEST", Timeframe: "1d",
-		StartDate:        candles[0].Time(),
-		EndDate:          time.UnixMilli(candles[15].OpenTime).Add(24 * time.Hour),
-		InitialCapital:   1000,
+		StartDate:         candles[0].Time(),
+		EndDate:           time.UnixMilli(candles[15].OpenTime).Add(24 * time.Hour),
+		InitialCapital:    1000,
 		PeriodicInjection: 200,
 		InjectionInterval: InjWeekly,
-		BaselineType:     BaselinePureDCA,
+		BaselineType:      BaselinePureDCA,
 	}
 	res, err := Run(candles, cfg, &probeSignal{index: 2, action: ActionBuy, weight: 0.5})
 	if err != nil {
@@ -160,7 +160,7 @@ func TestXIRROneYear(t *testing.T) {
 	t0 := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 	flows := []CashFlow{
 		{Time: t0.UnixMilli(), Amount: 1000},
-		{Time: t0.Add(365*24*time.Hour).UnixMilli(), Amount: -2000},
+		{Time: t0.Add(365 * 24 * time.Hour).UnixMilli(), Amount: -2000},
 	}
 	got := XIRR(flows)
 	if math.Abs(got-1.0) > 1e-6 {
@@ -249,12 +249,12 @@ func TestRunGridSmoke(t *testing.T) {
 	}
 	cfg := EngineConfig{
 		Symbol: "TEST", Timeframe: "1d",
-		StartDate:        candles[0].Time(),
-		EndDate:          time.UnixMilli(candles[119].OpenTime).Add(24 * time.Hour),
-		InitialCapital:   500,
+		StartDate:         candles[0].Time(),
+		EndDate:           time.UnixMilli(candles[119].OpenTime).Add(24 * time.Hour),
+		InitialCapital:    500,
 		PeriodicInjection: 50,
 		InjectionInterval: InjWeekly,
-		BaselineType:     BaselinePureDCA,
+		BaselineType:      BaselinePureDCA,
 	}
 	task := GridTask{
 		Cfg: cfg, StrategyID: IDMACross, Metric: MetricSatsAlpha,

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/NimbleMarkets/ntcharts/canvas"
 	"github.com/NimbleMarkets/ntcharts/linechart/timeserieslinechart"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // OscMode selects what the oscillator pane shows.

@@ -212,7 +212,7 @@ func (d *DataLoader) mergeMempoolHistory(ctx context.Context, symbol, timeframe 
 // candle per point.
 func mempoolToCandles(points []pricePoint, timeframe string) ([]engine.Candle, error) {
 	if timeframe == engine.TF1w {
-		return (&MempoolProvider{}). weeklyFromPoints(points), nil
+		return (&MempoolProvider{}).weeklyFromPoints(points), nil
 	}
 	day := int64(86400000)
 	out := make([]engine.Candle, 0, len(points)*7)

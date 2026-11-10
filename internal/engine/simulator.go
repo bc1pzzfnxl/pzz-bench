@@ -23,7 +23,7 @@ type Result struct {
 	Trades     []Trade
 	BaseTrades []Trade
 
-	TotalInjected float64
+	TotalInjected     float64
 	BaseInjectedTotal float64
 
 	FeesPaid     float64

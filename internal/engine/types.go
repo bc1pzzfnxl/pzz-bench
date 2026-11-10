@@ -170,10 +170,10 @@ type EngineConfig struct {
 	EndDate           time.Time
 	InitialCapital    float64
 	PeriodicInjection float64
-	InjectionInterval string // "daily" | "weekly" | "biweekly" | "monthly"
+	InjectionInterval string  // "daily" | "weekly" | "biweekly" | "monthly"
 	FeeRate           float64 // taker fee, decimal (0.001 == 0.10%)
 	SlippageRate      float64 // slippage, decimal (0.0005 == 0.05%)
-	BaselineType      string // "PURE_DCA" | "LUMP_SUM"
+	BaselineType      string  // "PURE_DCA" | "LUMP_SUM"
 }
 
 // Injection intervals.
@@ -186,8 +186,8 @@ const (
 
 // Baseline types.
 const (
-	BaselinePureDCA  = "PURE_DCA"
-	BaselineLumpSum  = "LUMP_SUM"
+	BaselinePureDCA = "PURE_DCA"
+	BaselineLumpSum = "LUMP_SUM"
 )
 
 // injectionPeriodIndex buckets a millisecond timestamp into sequential periods

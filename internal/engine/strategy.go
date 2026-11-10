@@ -22,15 +22,15 @@ const (
 // its bounds / options, its default value (as string) and whether it can be
 // used as an optimizer axis.
 type ParamSpec struct {
-	Name    string    // stable key, used in Params maps and TOML presets
-	Display string    // label shown in the sidebar form
+	Name    string // stable key, used in Params maps and TOML presets
+	Display string // label shown in the sidebar form
 	Kind    ParamKind
-	Options []string  // KindSelect only
-	Max     float64   // numeric bounds (inclusive)
+	Options []string // KindSelect only
+	Max     float64  // numeric bounds (inclusive)
 	Min     float64
-	Step    float64   // optimizer grid granularity
-	Default string    // default value, as typed in the form
-	Axis    bool      // eligible as a 2D optimizer axis
+	Step    float64 // optimizer grid granularity
+	Default string  // default value, as typed in the form
+	Axis    bool    // eligible as a 2D optimizer axis
 }
 
 // Params holds raw (string) parameter values keyed by ParamSpec.Name.
@@ -112,17 +112,17 @@ func (p Params) Bool(spec ParamSpec) (bool, error) {
 // and constructor. OptimizerAxes are the two default param names charted on
 // the Workspace 2 heatmap (X first).
 type StrategyDesc struct {
-	ID             string
-	Name           string
-	Specs          []ParamSpec
-	OptimizerAxes  [2]string
-	Build          func(p Params) (Strategy, error)
+	ID            string
+	Name          string
+	Specs         []ParamSpec
+	OptimizerAxes [2]string
+	Build         func(p Params) (Strategy, error)
 }
 
 var registry = func() map[string]StrategyDesc {
 	return map[string]StrategyDesc{
-		StrategyMACross{}.ID():  descMACross(),
-		StrategyRSIDCA{}.ID():   descRSIDCA(),
+		StrategyMACross{}.ID():   descMACross(),
+		StrategyRSIDCA{}.ID():    descRSIDCA(),
 		StrategyMACDTrend{}.ID(): descMACDTrend(),
 		StrategyMacro200W{}.ID(): descMacro200W(),
 	}
@@ -138,15 +138,15 @@ const (
 
 // StrategyMACross implements the dual moving average crossover.
 type StrategyMACross struct {
-	MAType    string // "SMA" | "EMA"
-	Fast      int
-	Slow      int
+	MAType     string // "SMA" | "EMA"
+	Fast       int
+	Slow       int
 	ExitToFiat bool
-	fastMA    []float64
-	slowMA    []float64
+	fastMA     []float64
+	slowMA     []float64
 }
 
-func (StrategyMACross) ID() string   { return IDMACross }
+func (StrategyMACross) ID() string { return IDMACross }
 func (s StrategyMACross) Name() string {
 	return fmt.Sprintf("%s Crossover (%s %d/%d)", s.MAType, strings.ToUpper(s.MAType[:1]), s.Fast, s.Slow)
 }
@@ -195,14 +195,14 @@ func (s *StrategyMACross) OnCandle(index int, _ PortfolioState) Signal {
 
 // StrategyRSIDCA accumulates on schedule, splurges on oversold dips.
 type StrategyRSIDCA struct {
-	Period        int
-	Oversold      float64
-	Overbought    float64
-	BaseBuyWeight float64
-	DipBuyWeight  float64
+	Period           int
+	Oversold         float64
+	Overbought       float64
+	BaseBuyWeight    float64
+	DipBuyWeight     float64
 	TakeProfitWeight float64
-	rsi           []float64
-	prevInjected  float64
+	rsi              []float64
+	prevInjected     float64
 }
 
 func (StrategyRSIDCA) ID() string { return IDRSIDCA }
@@ -249,10 +249,10 @@ func (s *StrategyRSIDCA) OnCandle(index int, state PortfolioState) Signal {
 
 // StrategyMACDTrend trades momentum crossovers of the MACD oscillator.
 type StrategyMACDTrend struct {
-	Fast           int
-	Slow           int
-	Signal         int
-	ZeroLineFilter bool
+	Fast            int
+	Slow            int
+	Signal          int
+	ZeroLineFilter  bool
 	macd, sig, hist []float64
 }
 

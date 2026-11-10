@@ -34,8 +34,8 @@ type MetricKey string
 
 // Optimizer metrics.
 const (
-	MetricSatsAlpha   MetricKey = "sats_alpha"   // default: BTC beats DCA?
-	MetricSortino     MetricKey = "sortino"      // risk-adjusted
+	MetricSatsAlpha   MetricKey = "sats_alpha" // default: BTC beats DCA?
+	MetricSortino     MetricKey = "sortino"    // risk-adjusted
 	MetricEquityAlpha MetricKey = "equity_alpha"
 )
 
@@ -131,7 +131,7 @@ func RunGrid(candles []Candle, task GridTask) GridResult {
 
 	workers := runtime.NumCPU()
 	if workers > nX*nY {
-		workers = nX*nY
+		workers = nX * nY
 	}
 	if workers < 1 {
 		workers = 1

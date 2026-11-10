@@ -14,9 +14,9 @@ import (
 
 // Paths bundles every user-level location pzz-bench touches.
 type Paths struct {
-	ConfigDir string // XDG config dir (~/.config/pzz-bench)
-	DataDir   string // XDG data dir (~/.local/share/pzz-bench)
-	ExportsDir  string // ./exports relative to the current working directory
+	ConfigDir  string // XDG config dir (~/.config/pzz-bench)
+	DataDir    string // XDG data dir (~/.local/share/pzz-bench)
+	ExportsDir string // ./exports relative to the current working directory
 }
 
 // DatabasePath is market.db inside DataDir.
@@ -82,18 +82,18 @@ func (p Paths) EnsureDirs() error {
 
 // Preset is one saved configuration snapshot.
 type Preset struct {
-	Name              string   `toml:"-"`
-	Symbol            string   `toml:"symbol"`
-	Timeframe         string   `toml:"timeframe"`
-	Start             string   `toml:"start"`
-	End               string   `toml:"end"`
-	InitialCapital    float64  `toml:"initial_capital"`
-	PeriodicInjection float64  `toml:"periodic_injection"`
-	InjectionInterval string   `toml:"injection_interval"`
-	FeeRate           float64  `toml:"fee_rate"`
-	SlippageRate      float64  `toml:"slippage_rate"`
-	Baseline          string   `toml:"baseline"`
-	Strategy          string   `toml:"strategy"`
+	Name              string            `toml:"-"`
+	Symbol            string            `toml:"symbol"`
+	Timeframe         string            `toml:"timeframe"`
+	Start             string            `toml:"start"`
+	End               string            `toml:"end"`
+	InitialCapital    float64           `toml:"initial_capital"`
+	PeriodicInjection float64           `toml:"periodic_injection"`
+	InjectionInterval string            `toml:"injection_interval"`
+	FeeRate           float64           `toml:"fee_rate"`
+	SlippageRate      float64           `toml:"slippage_rate"`
+	Baseline          string            `toml:"baseline"`
+	Strategy          string            `toml:"strategy"`
 	StrategyParams    map[string]string `toml:"strategy_params"`
 }
 
@@ -155,4 +155,3 @@ func ParseDate(s string) (time.Time, error) {
 	}
 	return time.Time{}, fmt.Errorf("invalid date %q (use YYYY-MM-DD)", s)
 }
-

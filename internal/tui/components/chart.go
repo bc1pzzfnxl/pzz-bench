@@ -1,12 +1,12 @@
-// Main chart pane: braille dual-equity / sats / drawdown canvas.
+// Main chart pane: line-run dual-equity / sats / drawdown canvas.
 package components
 
 import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/NimbleMarkets/ntcharts/linechart/timeserieslinechart"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bc1pzzfnxl/pzz-bench/internal/engine"
 )
@@ -16,9 +16,9 @@ type ChartMode uint8
 
 // Chart modes (PRD 6.3).
 const (
-	ModeFiat ChartMode = iota // strat vs baseline equity + injected cash
-	ModeSats                  // sats held by strategy vs baseline
-	ModeDrawdown              // underwater depth from all-time highs
+	ModeFiat     ChartMode = iota // strat vs baseline equity + injected cash
+	ModeSats                      // sats held by strategy vs baseline
+	ModeDrawdown                  // underwater depth from all-time highs
 )
 
 // ChartModeName returns the display label of a chart mode.
